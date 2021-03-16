@@ -238,3 +238,4 @@ _link_end:
 {{<figure src="./image01.png" >}}
 
 今回は、`_relocate_done`までにしておく。
+これ以降は、link addressになる。
