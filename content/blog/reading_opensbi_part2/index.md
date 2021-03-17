@@ -7,12 +7,14 @@ tags: ["OpenSBI", "Linux", "RISC-V"]
 draft: false
 ---
 
-OpenSBIの実装を読んでいこうと思う。
+[前回]({{<ref "/blog/reading_opensbi_part1/index.md" >}})はOpenSBIの移植を行った。
+今回はOpenSBIの実装を読んでいこうと思う。
 アセンブリはあまり読みたくないので、できるかぎり飛ばしていく。
 <!--more-->
 
 `firmware/fw_base.S`が基本となっており、ファームウェアのタイプによって`firmware/fw_payload.S`や`firmware/fw_dynamic.S`、`firmware/fw_jump.S`が
 使われる。
+今回は、`FW\_PAYLOAD`にてLinux kernelをPAYLOADとして指定する。
 
 ## リンカスクリプト
 `firmware/fw_base.ldS`
