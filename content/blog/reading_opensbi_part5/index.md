@@ -7,7 +7,7 @@ tags: ["OpenSBI", "Linux", "RISC-V"]
 draft: false
 ---
 
-[前回]({{<ref "/blog/reading_opensbi_part5/index.md" >}})はプラットフォームの初期化まで読んだ。今回はFDTのリロケーションと`_start_warm`を詳しく読んでいく。
+[前回]({{<ref "/blog/reading_opensbi_part4/index.md" >}})はプラットフォームの初期化まで読んだ。今回はFDTのリロケーションと`_start_warm`を詳しく読んでいく。
 <!--more-->
 
 ### FDT relocation
