@@ -197,7 +197,7 @@ struct sbi_platform {
 `tp`レジスタに`t3`レジスタを代入する。これは`_scratch_init`前に保存した`tp`の(scratch space)のアドレス
 次に、現在処理しているhart用のscratch spaceの`tp`からのオフセットを計算する。
 `s8 * t1`にて、`hart stack size * current hartid`で計算する。
-`tp`からオフセットを引き去る。(スタックは低位アドレス方面に伸長する。)
+`tp`からSBI\_SCRATCH\_SIZEを引き去る。
 `tp`はhartごとのscratch spaceのベースアドレスを指す。
 
 {{<figure src="./image00.png" >}}
