@@ -1,5 +1,5 @@
 ---
-title: "Investigation on kernel panic on my RISC-V Simulator"
+title: "Linux kernel panic on my RISC-V part1"
 date: 2021-03-16T04:01:13+09:00
 author: "@koyamanX"
 categories: ["Linux"]
