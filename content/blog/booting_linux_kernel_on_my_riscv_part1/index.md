@@ -1,5 +1,5 @@
 ---
-title: "Linux kernel panic on my RISC-V part1"
+title: "Booting linux kernel on my RISC-V part1"
 date: 2021-03-16T04:01:13+09:00
 author: "@koyamanX"
 categories: ["Linux"]
