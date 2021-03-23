@@ -77,6 +77,9 @@ Linuxでは、仮想アドレスを5つに分けて物理アドレスにマッ�
 5-Level Pagingのイメージ図を示す。
 {{<figure src="./image00.png" >}}
 それぞれ、Page Global Directory(PGD)、Page 4-Level Directory(P4D)、Page Upper Directory(PUD)、PMD(Page Middle Directory)、PTE(Page Table Entry)である。
+また、Physical PageはPage Frame Number(PFN)で一意に求めることができる。
+`PAGE_OFFSET`が0x1000の場合、
+例えば、0x00000000番地ではPFNは0(page 0)となり、0x00001000番地はPFNは1(page 1)となる。
 
 ### RISC-Vページング
 RISC-VにおけるLinuxのページングのイメージ図を示す。
@@ -307,10 +310,7 @@ static inline pte_t pte_mkwrite(pte_t pte)
 /* static inline pte_t pte_mkexec(pte_t pte) */
 
 static inline pte_t pte_mkdirty(pte_t pte)
-{
-	return __pte(pte_val(pte) | _PAGE_DIRTY);
-}
-
+{ return __pte(pte_val(pte) | _PAGE_DIRTY); } 
 static inline pte_t pte_mkclean(pte_t pte)
 {
 	return __pte(pte_val(pte) & ~(_PAGE_DIRTY));
