@@ -117,3 +117,97 @@ static uintptr_t __init best_map_size(phys_addr_t base, phys_addr_t size)
 	/* Save physical address for memblock reservation */
 	dtb_early_pa = dtb_pa;
 ```
+
+## head.S続き
+`arch/riscv/kernel/head.S`
+`call setup_vm`の次から。
+```asm
+	call setup_vm
+#ifdef CONFIG_MMU
+	la a0, early_pg_dir
+	call relocate
+#endif /* CONFIG_MMU */
+```
+次はリンクアドレスからロードアドレスへリロケーション(`relocate`)する。
+第一引数(`a0`)に`early_pg_dir`をセットし`call relocate`を実行する。
+
+### relocate
+
+`arch/riscv/kernel/head.S`
+```asm
+.align 2
+#ifdef CONFIG_MMU
+relocate:
+	/* Relocate return address */
+	li a1, PAGE_OFFSET
+	la a2, _start
+	sub a1, a1, a2
+	add ra, ra, a1
+
+	/* Point stvec to virtual address of intruction after satp write */
+	la a2, 1f
+	add a2, a2, a1
+	csrw CSR_TVEC, a2
+
+	/* Compute satp for kernel page tables, but don't load it yet */
+	srl a2, a0, PAGE_SHIFT
+	li a1, SATP_MODE
+	or a2, a2, a1
+
+	/*
+	 * Load trampoline page directory, which will cause us to trap to
+	 * stvec if VA != PA, or simply fall through if VA == PA.  We need a
+	 * full fence here because setup_vm() just wrote these PTEs and we need
+	 * to ensure the new translations are in use.
+	 */
+	la a0, trampoline_pg_dir
+	srl a0, a0, PAGE_SHIFT
+	or a0, a0, a1
+	sfence.vma
+	csrw CSR_SATP, a0
+.align 2
+1:
+	/* Set trap vector to spin forever to help debug */
+	la a0, .Lsecondary_park
+	csrw CSR_TVEC, a0
+
+	/* Reload the global pointer */
+.option push
+.option norelax
+	la gp, __global_pointer$
+.option pop
+
+	/*
+	 * Switch to kernel page tables.  A full fence is necessary in order to
+	 * avoid using the trampoline translations, which are only correct for
+	 * the first superpage.  Fetching the fence is guarnteed to work
+	 * because that first superpage is translated the same way.
+	 */
+	csrw CSR_SATP, a2
+	sfence.vma
+
+	ret
+#endif /* CONFIG_MMU */
+```
+`arch/riscv/kernel/head.S`
+```asm
+.Lsecondary_park:
+	/* We lack SMP support or have too many harts, so park this hart */
+	wfi
+	j .Lsecondary_park
+```
+まず、リターンアドレスをロードアドレスへリロケーションし、`ra`レジスタへセットする。
+次に、`1:`をロードアドレスへリロケーションし、Direct-Modeとして、`stvec`にセットする。
+次に、`a0`レジスタより受け取った`early_pg_dir`を`PAGE_SHIFT`回右に論理シフトし、`satp`の`PPN`を生成し、`a2`レジスタへセットする。
+`a2`レジスタのフラグを立て、SV32ページングを有効にする。
+次に、`trampoline_pg_dir`を用いて、簡単なリロケーションを行う。
+仮想アドレス`PAGE_OFFSET`(0xc0000000)から4MB分を物理アドレス(load address, 0x80400000)にマッピングする。
+TLBをフラッシュし、satpへセットする。
+これで、ページングが有効になり、最初の4MBはリロケーションされる。
+
+再度、`stvec`を設定し、`global pointer`をリロードする。
+その後、リロケーション済みの`early_pg_dir`を`satp`にロードし、TLBをフラッシュする。
+これにより、`early_pg_dir`によるページングを有効する。
+最後に、リロケーション済みのリターンアドレスを用いて呼び出し元へ戻る。
+
+次は、relocateの後から読んでいく。
