@@ -111,6 +111,7 @@ static uintptr_t __init best_map_size(phys_addr_t base, phys_addr_t size)
 以下に`setup_vm`で作成する`trampoline_pg_dir`を図示する。
 {{<figure src="./image01.png" >}}
 最後に、dtbの仮想アドレスと物理アドレスを保存する。
+仮想アドレスは、物理アドレスを用いて物理インデックスを計算している。
 ```c
 	/* Save pointer to DTB for early FDT parsing */
 	dtb_early_va = (void *)fix_to_virt(FIX_FDT) + (dtb_pa & ~PAGE_MASK);
