@@ -324,6 +324,23 @@ c1400000 D init_thread_union
 
 つまり、`sp`は(`0xc1400000 + 8192 = 0xc14002000`)(Link Address)となる。
 
+ちなみに、`init_thread_union`は`include/linux/sched.h`て定義されている。
+`include/linux/sched.h`
+```c
+union thread_union {
+#ifndef CONFIG_ARCH_TASK_STRUCT_ON_STACK
+	struct task_struct task;
+#endif
+#ifndef CONFIG_THREAD_INFO_IN_TASK
+	struct thread_info thread_info;
+#endif
+	unsigned long stack[THREAD_SIZE/sizeof(long)];
+};
+```
+
+つまり、スタックか、`thread_info`構造体、`task_struct`と共用でメモリ領域を使用する。
+今回の場合はスタックである。サイズは`THREAD_SIZE`wordsなので、`THREAD_SIZE`を`init_thread_union`に加算することで、スタックの高位アドレスがわかる。
+
 OpenSBIのロードアドレスは`0x80000000`である。
 Linux kernelのOpenSBIからのロードオフセットは`0x00400000`である。
 Linux kernelの開始のロードアドレスは`0x80400000`である。
