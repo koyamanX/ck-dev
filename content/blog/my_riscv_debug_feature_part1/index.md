@@ -1,5 +1,5 @@
 ---
-title: "My RISC-V debug feature"
+title: "My RISC-V debug feature part1"
 date: 2021-04-06T10:39:30+09:00
 author: "@koyamanX"
 categories: ["RISC-V"]
