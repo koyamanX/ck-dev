@@ -1,8 +1,11 @@
-baseURL = "http://localhost/"
+baseURL = "https://koyamanx.github.io/ck-dev"
 languageCode = "en-us"
 title = "ck-dev"
 theme = "hugo-notepadium"
 copyright = "©2021 koyamanX"
+
+publishDir = "docs"
+canonifyurls = true
 
 [markup.highlight]
 codeFences = true

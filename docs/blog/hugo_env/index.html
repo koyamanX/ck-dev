@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>Getting started with hugo&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Getting started with hugo" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">Getting started with hugo</h1><p class="article date">Monday, March 15, 2021</p></section><article class="article markdown-body"><h2 id="hugoを使ってみる">Hugoを使ってみる.</h2>
+<h3 id="モチベーション">モチベーション</h3>
+<p>今までは、紙ベースのノートに情報をまとめていたが、</p>
+<ul>
+<li>検索ができない</li>
+<li>画像貼り付けがめんどうくさい</li>
+<li>コピペができない</li>
+</ul>
+<p>など不便な点がいくつかあった。<br>
+そこで、データとして情報を集約していきたいと考えた。
+いろいろ調べているうちに、hugoが簡単そうであったため導入してみた。
+Markdownで記述ができ、静的ページに変換する仕組みのようである。<br>
+以下に導入と簡単な使用方法をまとめておく。</p>
+<h3 id="インストール">インストール</h3>
+<p>環境としてUbuntu 20.04.2 LTSを仮定する。</p>
+<p><a href="https://gohugo.io/getting-started/installing"target="_blank" rel="noopener noreferrer">hugo公式インストールガイド</a>
+
+<a href="https://gohugo.io/getting-started/quick-start/"target="_blank" rel="noopener noreferrer">hugo公式Quick Start</a>
+</p>
+<h4 id="hugoインストール">hugoインストール</h4>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">sudo apt install hugo
+</code></pre></div><h4 id="サイトの作成">サイトの作成</h4>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">hugo new site ck-dev
+</code></pre></div><h4 id="テーマの追加">テーマの追加</h4>
+<p>デザインがいい感じなので、テーマとしてnotepadiumを採用する。
+<a href="https://github.com/cntrump/hugo-notepadium"target="_blank" rel="noopener noreferrer">Notepadium Github</a>
+</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash"><span class="nb">cd</span> ck-dev
+git init
+git submodule add https://github.com/cntrump/hugo-notepadium.git themes/hugo-notepadium
+</code></pre></div><h4 id="テーマの設定">テーマの設定</h4>
+<div class="highlight"><pre class="chroma"><code class="language-toml" data-lang="toml"><span class="nx">baseURL</span> <span class="p">=</span> <span class="s2">&#34;http://localhost/&#34;</span>
+<span class="nx">languageCode</span> <span class="p">=</span> <span class="s2">&#34;en-us&#34;</span>
+<span class="nx">title</span> <span class="p">=</span> <span class="s2">&#34;ck-dev&#34;</span>
+<span class="nx">theme</span> <span class="p">=</span> <span class="s2">&#34;hugo-notepadium&#34;</span>
+<span class="nx">copyright</span> <span class="p">=</span> <span class="s2">&#34;©2021 koyamanX&#34;</span>
+
+<span class="p">[</span><span class="nx">markup</span><span class="p">.</span><span class="nx">highlight</span><span class="p">]</span>
+<span class="nx">codeFences</span> <span class="p">=</span> <span class="kc">true</span>
+<span class="nx">noClasses</span> <span class="p">=</span> <span class="kc">false</span>
+
+<span class="p">[</span><span class="nx">markup</span><span class="p">.</span><span class="nx">goldmark</span><span class="p">.</span><span class="nx">renderer</span><span class="p">]</span>
+<span class="nx">unsafe</span> <span class="p">=</span> <span class="kc">true</span>  <span class="c"># enable raw HTML in Markdown</span>
+
+<span class="p">[</span><span class="nx">params</span><span class="p">]</span>
+<span class="nx">style</span> <span class="p">=</span> <span class="s2">&#34;auto&#34;</span>  <span class="c"># default: auto. light: light theme, dark: dark theme, auto: based on system.</span>
+<span class="nx">dateFormat</span> <span class="p">=</span> <span class="s2">&#34;Monday, January 2, 2006&#34;</span>  <span class="c"># if unset, default is &#34;2006-01-02&#34;</span>
+<span class="nx">logo</span> <span class="p">=</span> <span class="s2">&#34;&#34;</span>  <span class="c"># if you have a logo png</span>
+<span class="nx">slogan</span> <span class="p">=</span> <span class="s2">&#34;Notes for myself&#34;</span>
+<span class="nx">license</span> <span class="p">=</span> <span class="s2">&#34;&#34;</span>  <span class="c"># CC License</span>
+<span class="nx">fullRss</span> <span class="p">=</span> <span class="kc">false</span> <span class="c"># Puts entire HTML post into rss &#39;description&#39; tag. If unset, default is false.</span>
+
+<span class="p">[</span><span class="nx">params</span><span class="p">.</span><span class="nx">comments</span><span class="p">]</span>
+<span class="nx">enable</span> <span class="p">=</span> <span class="kc">true</span>  <span class="c"># En/Disable comments globally, default: false. You can always enable comments on per page.</span>
+
+<span class="p">[</span><span class="nx">params</span><span class="p">.</span><span class="nx">math</span><span class="p">]</span>
+<span class="nx">enable</span> <span class="p">=</span> <span class="kc">false</span>  <span class="c"># optional: true, false. Enable globally, default: false. You can always enable math on per page.</span>
+<span class="nx">use</span> <span class="p">=</span> <span class="s2">&#34;katex&#34;</span>  <span class="c"># option: &#34;katex&#34;, &#34;mathjax&#34;. default: &#34;katex&#34;</span>
+
+<span class="p">[</span><span class="nx">params</span><span class="p">.</span><span class="nx">syntax</span><span class="p">]</span>
+<span class="nx">use</span> <span class="p">=</span> <span class="s2">&#34;none&#34;</span>  <span class="c"># builtin: &#34;prismjs&#34;, &#34;hljs&#34;. &#34;none&#34; means Chroma</span>
+<span class="nx">theme</span> <span class="p">=</span> <span class="s2">&#34;xcode&#34;</span>
+<span class="nx">darkTheme</span> <span class="p">=</span> <span class="s2">&#34;xcode-dark&#34;</span>  <span class="c"># apply this theme in dark mode</span>
+
+<span class="p">[</span><span class="nx">params</span><span class="p">.</span><span class="nx">share</span><span class="p">]</span>
+<span class="nx">enable</span> <span class="p">=</span> <span class="kc">true</span>
+<span class="nx">addThisId</span> <span class="p">=</span> <span class="s2">&#34;x-1234567890&#34;</span>
+<span class="nx">inlineToolId</span> <span class="p">=</span> <span class="s2">&#34;&#34;</span>
+
+<span class="p">[</span><span class="nx">params</span><span class="p">.</span><span class="nx">nav</span><span class="p">]</span>
+<span class="nx">showCategories</span> <span class="p">=</span> <span class="kc">true</span>       <span class="c"># /categories/</span>
+<span class="nx">showTags</span> <span class="p">=</span> <span class="kc">true</span>             <span class="c"># /tags/</span>
+
+<span class="c"># custom navigation items</span>
+
+<span class="p">[[</span><span class="nx">params</span><span class="p">.</span><span class="nx">nav</span><span class="p">.</span><span class="nx">custom</span><span class="p">]]</span>
+<span class="nx">title</span> <span class="p">=</span> <span class="s2">&#34;About&#34;</span>
+<span class="nx">url</span> <span class="p">=</span> <span class="s2">&#34;/about&#34;</span>
+
+</code></pre></div><h4 id="ポストの作成">ポストの作成</h4>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">hugo new blog/first-post.md
+</code></pre></div><p><code>contents/blog/first-post.md</code>が作成される。</p>
+<p>ファイルを開き、編集する。</p>
+<div class="highlight"><pre class="chroma"><code class="language-toml" data-lang="toml"><span class="err">---</span>
+<span class="nx">title</span><span class="err">:</span> <span class="s2">&#34;Getting started with hugo&#34;</span>
+<span class="nx">date</span><span class="err">:</span> <span class="ld">2021-03-15T06:40:17+09:00</span>
+<span class="nx">author</span><span class="err">:</span> <span class="s2">&#34;@koyamanX&#34;</span>
+<span class="nx">categories</span><span class="err">:</span> <span class="p">[</span><span class="s2">&#34;hugo&#34;</span><span class="p">]</span>
+<span class="nx">tags</span><span class="err">:</span> <span class="p">[</span><span class="s2">&#34;&#34;</span><span class="p">]</span>
+<span class="nx">draft</span><span class="err">:</span> <span class="kc">true</span>
+<span class="err">---</span>
+<span class="c"># 本文</span>
+</code></pre></div><p>著者、カテゴリー、タグを追加する。
+毎回追加するのはめんどうくさいので、<code>archetypes/default.md</code>へ</p>
+<div class="highlight"><pre class="chroma"><code class="language-toml" data-lang="toml"><span class="err">---</span>
+<span class="nx">title</span><span class="err">:</span> <span class="s2">&#34;{{ replace .Name &#34;</span><span class="err">-</span><span class="s2">&#34; &#34;</span> <span class="s2">&#34; | title }}&#34;</span>
+<span class="nx">date</span><span class="err">:</span> <span class="p">{{</span> <span class="p">.</span><span class="nx">Date</span> <span class="p">}}</span>
+<span class="nx">author</span><span class="err">:</span> <span class="s2">&#34;@koyamanX&#34;</span>
+<span class="nx">categories</span><span class="err">:</span> <span class="p">[</span><span class="s2">&#34;hugo&#34;</span><span class="p">]</span>
+<span class="nx">tags</span><span class="err">:</span> <span class="p">[</span><span class="s2">&#34;&#34;</span><span class="p">]</span>
+<span class="nx">draft</span><span class="err">:</span> <span class="kc">true</span>
+<span class="err">---</span>
+</code></pre></div><p>を記載しておく。
+<code>hugo new</code>でページを作成したときに使われるようになる。</p>
+<p><code>---</code>の下に本文をMarkdownにて記述する。
+いい感じに<code>&lt;!--more--&gt;</code>を一つ入れることで、カテゴリーなどで表示したときに見やすくなる。</p>
+<p>なお、draft: trueとなっているのは、投稿がドラフト段階にあることを意味しており、静的ページに変換する際に、オプションが必要である。</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">hugo	<span class="c1"># without Draft</span>
+hugo -D	<span class="c1"># with Draft</span>
+</code></pre></div><h4 id="確認">確認</h4>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">hugo server
+</code></pre></div><p>localhost:1313にアクセスしてページが表示されれば成功。</p>
+<h4 id="nginxをウェブサーバーとして使う">Nginxをウェブサーバーとして使う。</h4>
+<p>hugoには組込みのウェブサーバーがあるらしい。
+<a href="https://gohugo.io/commands/hugo_server/"target="_blank" rel="noopener noreferrer">hugo server</a>
+
+適当にページを見る分にはこれでよさそうであるが、将来公開する用(現状はローカルホストで自分用)に一応hugo+Nginxで環境を構築してみる。
+<a href="https://gideonwolfe.com/posts/sysadmin/hugonginx/"target="_blank" rel="noopener noreferrer">Deploying a static Hugo site with NGINX</a>
+</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">sudo apt install nginx
+sudo cp /etc/nginx/sites-available/default /etc/nginx/sites-available/hugo
+sudo ln -s /etc/nginx/sites-available/hugo /etc/nginx/sites-enabled/hugo
+</code></pre></div><p><code>/etc/nginx/sites-available/hugo</code>を開き、
+rootをhugoのサイトにする。</p>
+<pre><code>servers {
+	...
+	root /home/koyaman/ck-dev;
+	...
+}
+</code></pre><h4 id="nginxの起動">Nginxの起動</h4>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">sudo systemctl <span class="nb">enable</span> nginx
+sudo systemctl start nginx
+</code></pre></div><p><code>localhost</code>へアクセスし、ページが見れることを確認する。</p>
+<p>いい感じ</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/hugo/>hugo</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/tutorial/>tutorial</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/setup/>setup</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/hugo/>hugo</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
+</div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/introduction_to_nsl/"><span class="iconfont icon-article"></span>Next Synthesis Language</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">©2021 koyamanX</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section></body>
+
+</html>

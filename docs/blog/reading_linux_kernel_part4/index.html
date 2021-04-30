@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>Reading linux kernel part4&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Reading linux kernel part4" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">Reading linux kernel part4</h1><p class="article date">Tuesday, March 30, 2021</p></section><article class="article markdown-body"><p><code>setup_vm</code>の続きを読んでいく。</p>
+<h2 id="setup_vm">setup_vm</h2>
+<p><code>arch/riscv/mm/init.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="n">asmlinkage</span> <span class="kt">void</span> <span class="n">__init</span> <span class="nf">setup_vm</span><span class="p">(</span><span class="n">uintptr_t</span> <span class="n">dtb_pa</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="n">uintptr_t</span> <span class="n">va</span><span class="p">,</span> <span class="n">end_va</span><span class="p">;</span>
+	<span class="n">uintptr_t</span> <span class="n">load_pa</span> <span class="o">=</span> <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)(</span><span class="o">&amp;</span><span class="n">_start</span><span class="p">);</span>
+	<span class="n">uintptr_t</span> <span class="n">load_sz</span> <span class="o">=</span> <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)(</span><span class="o">&amp;</span><span class="n">_end</span><span class="p">)</span> <span class="o">-</span> <span class="n">load_pa</span><span class="p">;</span>
+	<span class="n">uintptr_t</span> <span class="n">map_size</span> <span class="o">=</span> <span class="n">best_map_size</span><span class="p">(</span><span class="n">load_pa</span><span class="p">,</span> <span class="n">MAX_EARLY_MAPPING_SIZE</span><span class="p">);</span>
+
+	<span class="n">va_pa_offset</span> <span class="o">=</span> <span class="n">PAGE_OFFSET</span> <span class="o">-</span> <span class="n">load_pa</span><span class="p">;</span>
+	<span class="n">pfn_base</span> <span class="o">=</span> <span class="n">PFN_DOWN</span><span class="p">(</span><span class="n">load_pa</span><span class="p">);</span>
+
+	<span class="cm">/*
+</span><span class="cm">	 * Enforce boot alignment requirements of RV32 and
+</span><span class="cm">	 * RV64 by only allowing PMD or PGD mappings.
+</span><span class="cm">	 */</span>
+	<span class="n">BUG_ON</span><span class="p">(</span><span class="n">map_size</span> <span class="o">==</span> <span class="n">PAGE_SIZE</span><span class="p">);</span>
+
+	<span class="cm">/* Sanity check alignment and size */</span>
+	<span class="n">BUG_ON</span><span class="p">((</span><span class="n">PAGE_OFFSET</span> <span class="o">%</span> <span class="n">PGDIR_SIZE</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">);</span>
+	<span class="n">BUG_ON</span><span class="p">((</span><span class="n">load_pa</span> <span class="o">%</span> <span class="n">map_size</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">);</span>
+	<span class="n">BUG_ON</span><span class="p">(</span><span class="n">load_sz</span> <span class="o">&gt;</span> <span class="n">MAX_EARLY_MAPPING_SIZE</span><span class="p">);</span>
+
+	<span class="cm">/* Setup early PGD for fixmap */</span>
+	<span class="n">create_pgd_mapping</span><span class="p">(</span><span class="n">early_pg_dir</span><span class="p">,</span> <span class="n">FIXADDR_START</span><span class="p">,</span>
+			   <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)</span><span class="n">fixmap_pgd_next</span><span class="p">,</span> <span class="n">PGDIR_SIZE</span><span class="p">,</span> <span class="n">PAGE_TABLE</span><span class="p">);</span>
+
+<span class="cp">#ifndef __PAGETABLE_PMD_FOLDED
+</span><span class="cp"></span>	<span class="cm">/* Setup fixmap PMD */</span>
+	<span class="n">create_pmd_mapping</span><span class="p">(</span><span class="n">fixmap_pmd</span><span class="p">,</span> <span class="n">FIXADDR_START</span><span class="p">,</span>
+			   <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)</span><span class="n">fixmap_pte</span><span class="p">,</span> <span class="n">PMD_SIZE</span><span class="p">,</span> <span class="n">PAGE_TABLE</span><span class="p">);</span>
+	<span class="cm">/* Setup trampoline PGD and PMD */</span>
+	<span class="n">create_pgd_mapping</span><span class="p">(</span><span class="n">trampoline_pg_dir</span><span class="p">,</span> <span class="n">PAGE_OFFSET</span><span class="p">,</span>
+			   <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)</span><span class="n">trampoline_pmd</span><span class="p">,</span> <span class="n">PGDIR_SIZE</span><span class="p">,</span> <span class="n">PAGE_TABLE</span><span class="p">);</span>
+	<span class="n">create_pmd_mapping</span><span class="p">(</span><span class="n">trampoline_pmd</span><span class="p">,</span> <span class="n">PAGE_OFFSET</span><span class="p">,</span>
+			   <span class="n">load_pa</span><span class="p">,</span> <span class="n">PMD_SIZE</span><span class="p">,</span> <span class="n">PAGE_KERNEL_EXEC</span><span class="p">);</span>
+<span class="cp">#else
+</span><span class="cp"></span>	<span class="cm">/* Setup trampoline PGD */</span>
+	<span class="n">create_pgd_mapping</span><span class="p">(</span><span class="n">trampoline_pg_dir</span><span class="p">,</span> <span class="n">PAGE_OFFSET</span><span class="p">,</span>
+			   <span class="n">load_pa</span><span class="p">,</span> <span class="n">PGDIR_SIZE</span><span class="p">,</span> <span class="n">PAGE_KERNEL_EXEC</span><span class="p">);</span>
+<span class="cp">#endif
+</span><span class="cp"></span>	<span class="cm">/*
+</span><span class="cm">	 * Setup early PGD covering entire kernel which will allows
+</span><span class="cm">	 * us to reach paging_init(). We map all memory banks later
+</span><span class="cm">	 * in setup_vm_final() below.
+</span><span class="cm">	 */</span>
+	<span class="n">end_va</span> <span class="o">=</span> <span class="n">PAGE_OFFSET</span> <span class="o">+</span> <span class="n">load_sz</span><span class="p">;</span>
+	<span class="k">for</span> <span class="p">(</span><span class="n">va</span> <span class="o">=</span> <span class="n">PAGE_OFFSET</span><span class="p">;</span> <span class="n">va</span> <span class="o">&lt;</span> <span class="n">end_va</span><span class="p">;</span> <span class="n">va</span> <span class="o">+=</span> <span class="n">map_size</span><span class="p">)</span>
+		<span class="n">create_pgd_mapping</span><span class="p">(</span><span class="n">early_pg_dir</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span>
+				   <span class="n">load_pa</span> <span class="o">+</span> <span class="p">(</span><span class="n">va</span> <span class="o">-</span> <span class="n">PAGE_OFFSET</span><span class="p">),</span>
+				   <span class="n">map_size</span><span class="p">,</span> <span class="n">PAGE_KERNEL_EXEC</span><span class="p">);</span>
+
+	<span class="cm">/* Create fixed mapping for early FDT parsing */</span>
+	<span class="n">end_va</span> <span class="o">=</span> <span class="n">__fix_to_virt</span><span class="p">(</span><span class="n">FIX_FDT</span><span class="p">)</span> <span class="o">+</span> <span class="n">FIX_FDT_SIZE</span><span class="p">;</span>
+	<span class="k">for</span> <span class="p">(</span><span class="n">va</span> <span class="o">=</span> <span class="n">__fix_to_virt</span><span class="p">(</span><span class="n">FIX_FDT</span><span class="p">);</span> <span class="n">va</span> <span class="o">&lt;</span> <span class="n">end_va</span><span class="p">;</span> <span class="n">va</span> <span class="o">+=</span> <span class="n">PAGE_SIZE</span><span class="p">)</span>
+		<span class="n">create_pte_mapping</span><span class="p">(</span><span class="n">fixmap_pte</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span>
+				   <span class="n">dtb_pa</span> <span class="o">+</span> <span class="p">(</span><span class="n">va</span> <span class="o">-</span> <span class="n">__fix_to_virt</span><span class="p">(</span><span class="n">FIX_FDT</span><span class="p">)),</span>
+				   <span class="n">PAGE_SIZE</span><span class="p">,</span> <span class="n">PAGE_KERNEL</span><span class="p">);</span>
+
+	<span class="cm">/* Save pointer to DTB for early FDT parsing */</span>
+	<span class="n">dtb_early_va</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">fix_to_virt</span><span class="p">(</span><span class="n">FIX_FDT</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">dtb_pa</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">PAGE_MASK</span><span class="p">);</span>
+	<span class="cm">/* Save physical address for memblock reservation */</span>
+	<span class="n">dtb_early_pa</span> <span class="o">=</span> <span class="n">dtb_pa</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><p><code>arch/riscv/mm/init.c</code>
+<code>setup_vm</code>続き</p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c">	<span class="n">uintptr_t</span> <span class="n">load_pa</span> <span class="o">=</span> <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)(</span><span class="o">&amp;</span><span class="n">_start</span><span class="p">);</span>
+	<span class="n">uintptr_t</span> <span class="n">load_sz</span> <span class="o">=</span> <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)(</span><span class="o">&amp;</span><span class="n">_end</span><span class="p">)</span> <span class="o">-</span> <span class="n">load_pa</span><span class="p">;</span>
+	<span class="n">uintptr_t</span> <span class="n">map_size</span> <span class="o">=</span> <span class="n">best_map_size</span><span class="p">(</span><span class="n">load_pa</span><span class="p">,</span> <span class="n">MAX_EARLY_MAPPING_SIZE</span><span class="p">);</span>
+</code></pre></div><p><code>arch/riscv/mm/init.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="k">static</span> <span class="n">uintptr_t</span> <span class="n">__init</span> <span class="nf">best_map_size</span><span class="p">(</span><span class="n">phys_addr_t</span> <span class="n">base</span><span class="p">,</span> <span class="n">phys_addr_t</span> <span class="n">size</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="cm">/* Upgrade to PMD_SIZE mappings whenever possible */</span>
+	<span class="k">if</span> <span class="p">((</span><span class="n">base</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">PMD_SIZE</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span> <span class="o">||</span> <span class="p">(</span><span class="n">size</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">PMD_SIZE</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span>
+		<span class="k">return</span> <span class="n">PAGE_SIZE</span><span class="p">;</span>
+
+	<span class="k">return</span> <span class="n">PMD_SIZE</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><p><code>load_pa</code>は0x80400000である。
+<code>load_sz</code>はload addressの<code>_end</code>から<code>_start</code>を引くことで、カーネル自体のサイズを求める。
+<code>map_size</code>は<code>best_map_size</code>で求めるが、<code>best_map_size</code>では、可能な限り<code>PMD_SIZE</code>(<code>PGDIR_SIZE</code>)へpromoteする。
+不可能な場合は<code>PAGE_SIZE</code>にする。
+今回のパターンでは<code>PGDIR_SIZE</code>へpromoteしており、4MBページングを行う。</p>
+<p><code>setup_vm</code>では、カーネルをリンクアドレスからロードアドレスへマッピングする。
+また、fixmap領域にDTBをマッピングする。</p>
+<p>以下に<code>setup_vm</code>で作成する<code>early_pg_dir</code>を図示する。
+<span class="image-container"><span class="link" ><a href="./image00.png" 
+        target="_blank"><img class="img" src="./image00.png"/></a></span>
+</span>
+以下に<code>setup_vm</code>で作成する<code>trampoline_pg_dir</code>を図示する。
+<span class="image-container"><span class="link" ><a href="./image01.png" 
+        target="_blank"><img class="img" src="./image01.png"/></a></span>
+</span>
+最後に、dtbの仮想アドレスと物理アドレスを保存する。
+仮想アドレスは、物理アドレスを用いて物理インデックスを計算している。</p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c">	<span class="cm">/* Save pointer to DTB for early FDT parsing */</span>
+	<span class="n">dtb_early_va</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="n">fix_to_virt</span><span class="p">(</span><span class="n">FIX_FDT</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">dtb_pa</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">PAGE_MASK</span><span class="p">);</span>
+	<span class="cm">/* Save physical address for memblock reservation */</span>
+	<span class="n">dtb_early_pa</span> <span class="o">=</span> <span class="n">dtb_pa</span><span class="p">;</span>
+</code></pre></div><h2 id="heads続き">head.S続き</h2>
+<p><code>arch/riscv/kernel/head.S</code>
+<code>call setup_vm</code>の次から。</p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm">	<span class="nf">call</span> <span class="no">setup_vm</span>
+<span class="c">#ifdef CONFIG_MMU
+</span><span class="c"></span>	<span class="nf">la</span> <span class="no">a0</span><span class="p">,</span> <span class="no">early_pg_dir</span>
+	<span class="nf">call</span> <span class="no">relocate</span>
+<span class="c">#endif /* CONFIG_MMU */
+</span></code></pre></div><p>次はリンクアドレスからロードアドレスへリロケーション(<code>relocate</code>)する。
+第一引数(<code>a0</code>)に<code>early_pg_dir</code>をセットし<code>call relocate</code>を実行する。</p>
+<h3 id="relocate">relocate</h3>
+<p><code>arch/riscv/kernel/head.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">.align</span> <span class="mi">2</span>
+<span class="c">#ifdef CONFIG_MMU
+</span><span class="c"></span><span class="nl">relocate:</span>
+	<span class="err">/*</span> <span class="nf">Relocate</span> <span class="no">return</span> <span class="no">address</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">li</span> <span class="no">a1</span><span class="p">,</span> <span class="no">PAGE_OFFSET</span>
+	<span class="nf">la</span> <span class="no">a2</span><span class="p">,</span> <span class="no">_start</span>
+	<span class="nf">sub</span> <span class="no">a1</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">a2</span>
+	<span class="nf">add</span> <span class="no">ra</span><span class="p">,</span> <span class="no">ra</span><span class="p">,</span> <span class="no">a1</span>
+
+	<span class="err">/*</span> <span class="nf">Point</span> <span class="no">stvec</span> <span class="no">to</span> <span class="no">virtual</span> <span class="no">address</span> <span class="no">of</span> <span class="no">intruction</span> <span class="no">after</span> <span class="no">satp</span> <span class="no">write</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span> <span class="no">a2</span><span class="p">,</span> <span class="mi">1</span><span class="no">f</span>
+	<span class="nf">add</span> <span class="no">a2</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">a1</span>
+	<span class="nf">csrw</span> <span class="no">CSR_TVEC</span><span class="p">,</span> <span class="no">a2</span>
+
+	<span class="err">/*</span> <span class="nf">Compute</span> <span class="no">satp</span> <span class="no">for</span> <span class="no">kernel</span> <span class="no">page</span> <span class="no">tables</span><span class="p">,</span> <span class="no">but</span> <span class="no">don</span><span class="err">&#39;</span><span class="no">t</span> <span class="no">load</span> <span class="no">it</span> <span class="no">yet</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">srl</span> <span class="no">a2</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">PAGE_SHIFT</span>
+	<span class="nf">li</span> <span class="no">a1</span><span class="p">,</span> <span class="no">SATP_MODE</span>
+	<span class="nf">or</span> <span class="no">a2</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">a1</span>
+
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">Load</span> <span class="no">trampoline</span> <span class="no">page</span> <span class="no">directory</span><span class="p">,</span> <span class="no">which</span> <span class="no">will</span> <span class="no">cause</span> <span class="no">us</span> <span class="no">to</span> <span class="no">trap</span> <span class="no">to</span>
+	 <span class="err">*</span> <span class="nf">stvec</span> <span class="no">if</span> <span class="no">VA</span> <span class="p">!</span><span class="err">=</span> <span class="no">PA</span><span class="p">,</span> <span class="no">or</span> <span class="no">simply</span> <span class="no">fall</span> <span class="no">through</span> <span class="no">if</span> <span class="no">VA</span> <span class="err">==</span> <span class="no">PA.</span>  <span class="no">We</span> <span class="no">need</span> <span class="no">a</span>
+	 <span class="err">*</span> <span class="nf">full</span> <span class="no">fence</span> <span class="no">here</span> <span class="no">because</span> <span class="no">setup_vm</span><span class="p">()</span> <span class="no">just</span> <span class="no">wrote</span> <span class="no">these</span> <span class="no">PTEs</span> <span class="no">and</span> <span class="no">we</span> <span class="no">need</span>
+	 <span class="err">*</span> <span class="nf">to</span> <span class="no">ensure</span> <span class="no">the</span> <span class="no">new</span> <span class="no">translations</span> <span class="no">are</span> <span class="no">in</span> <span class="no">use.</span>
+	 <span class="err">*/</span>
+	<span class="nf">la</span> <span class="no">a0</span><span class="p">,</span> <span class="no">trampoline_pg_dir</span>
+	<span class="nf">srl</span> <span class="no">a0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">PAGE_SHIFT</span>
+	<span class="nf">or</span> <span class="no">a0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">a1</span>
+	<span class="nf">sfence.vma</span>
+	<span class="nf">csrw</span> <span class="no">CSR_SATP</span><span class="p">,</span> <span class="no">a0</span>
+<span class="na">.align</span> <span class="mi">2</span>
+<span class="err">1:</span>
+	<span class="err">/*</span> <span class="nf">Set</span> <span class="no">trap</span> <span class="no">vector</span> <span class="no">to</span> <span class="no">spin</span> <span class="no">forever</span> <span class="no">to</span> <span class="no">help</span> <span class="no">debug</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span> <span class="no">a0</span><span class="p">,</span> <span class="no">.Lsecondary_park</span>
+	<span class="nf">csrw</span> <span class="no">CSR_TVEC</span><span class="p">,</span> <span class="no">a0</span>
+
+	<span class="err">/*</span> <span class="nf">Reload</span> <span class="no">the</span> <span class="no">global</span> <span class="no">pointer</span> <span class="p">*</span><span class="err">/</span>
+<span class="na">.option</span> <span class="no">push</span>
+<span class="na">.option</span> <span class="no">norelax</span>
+	<span class="nf">la</span> <span class="no">gp</span><span class="p">,</span> <span class="no">__global_pointer$</span>
+<span class="na">.option</span> <span class="no">pop</span>
+
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">Switch</span> <span class="no">to</span> <span class="no">kernel</span> <span class="no">page</span> <span class="no">tables.</span>  <span class="no">A</span> <span class="no">full</span> <span class="no">fence</span> <span class="no">is</span> <span class="no">necessary</span> <span class="no">in</span> <span class="no">order</span> <span class="no">to</span>
+	 <span class="err">*</span> <span class="nf">avoid</span> <span class="no">using</span> <span class="no">the</span> <span class="no">trampoline</span> <span class="no">translations</span><span class="p">,</span> <span class="no">which</span> <span class="no">are</span> <span class="no">only</span> <span class="no">correct</span> <span class="no">for</span>
+	 <span class="err">*</span> <span class="nf">the</span> <span class="no">first</span> <span class="no">superpage.</span>  <span class="no">Fetching</span> <span class="no">the</span> <span class="no">fence</span> <span class="no">is</span> <span class="no">guarnteed</span> <span class="no">to</span> <span class="no">work</span>
+	 <span class="err">*</span> <span class="nf">because</span> <span class="no">that</span> <span class="no">first</span> <span class="no">superpage</span> <span class="no">is</span> <span class="no">translated</span> <span class="no">the</span> <span class="no">same</span> <span class="no">way.</span>
+	 <span class="err">*/</span>
+	<span class="nf">csrw</span> <span class="no">CSR_SATP</span><span class="p">,</span> <span class="no">a2</span>
+	<span class="nf">sfence.vma</span>
+
+	<span class="nf">ret</span>
+<span class="c">#endif /* CONFIG_MMU */
+</span></code></pre></div><p><code>arch/riscv/kernel/head.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="nl">.Lsecondary_park:</span>
+	<span class="err">/*</span> <span class="nf">We</span> <span class="no">lack</span> <span class="no">SMP</span> <span class="no">support</span> <span class="no">or</span> <span class="no">have</span> <span class="no">too</span> <span class="no">many</span> <span class="no">harts</span><span class="p">,</span> <span class="no">so</span> <span class="no">park</span> <span class="no">this</span> <span class="no">hart</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">wfi</span>
+	<span class="nf">j</span> <span class="no">.Lsecondary_park</span>
+</code></pre></div><p>まず、リターンアドレスをロードアドレスへリロケーションし、<code>ra</code>レジスタへセットする。
+次に、<code>1:</code>をロードアドレスへリロケーションし、Direct-Modeとして、<code>stvec</code>にセットする。
+次に、<code>a0</code>レジスタより受け取った<code>early_pg_dir</code>を<code>PAGE_SHIFT</code>回右に論理シフトし、<code>satp</code>の<code>PPN</code>を生成し、<code>a2</code>レジスタへセットする。
+<code>a2</code>レジスタのフラグを立て、SV32ページングを有効にする。
+次に、<code>trampoline_pg_dir</code>を用いて、簡単なリロケーションを行う。
+仮想アドレス<code>PAGE_OFFSET</code>(0xc0000000)から4MB分を物理アドレス(load address, 0x80400000)にマッピングする。
+TLBをフラッシュし、satpへセットする。
+これで、ページングが有効になり、最初の4MBはリロケーションされる。</p>
+<p>再度、<code>stvec</code>を設定し、<code>global pointer</code>をリロードする。
+その後、リロケーション済みの<code>early_pg_dir</code>を<code>satp</code>にロードし、TLBをフラッシュする。
+これにより、<code>early_pg_dir</code>によるページングを有効する。
+最後に、リロケーション済みのリターンアドレスを用いて呼び出し元へ戻る。</p>
+<p>次は、relocateの後から読んでいく。</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
+</div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part5/"><span class="iconfont icon-article"></span>Reading linux kernel part5</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part3/"><span class="iconfont icon-article"></span>Reading linux kernel part3</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">©2021 koyamanX</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section></body>
+
+</html>

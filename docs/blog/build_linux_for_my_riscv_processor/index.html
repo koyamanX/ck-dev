@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>Building Linux kernel for my RISC-V SoC(RV32X SoC)&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Building Linux kernel for my RISC-V SoC(RV32X SoC)" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">Building Linux kernel for my RISC-V SoC(RV32X SoC)</h1><p class="article date">Tuesday, March 16, 2021</p></section><article class="article markdown-body"><h2 id="概要">概要</h2>
+<p>自作のRISC-V SoC向けのLinuxカーネルのビルドフローをメモとして残す。
+アーキテクチャはRV32IMAである。
+特権モードは(M, S, U)をサポートしており、SV32ページングを実装している。
+クロスコンパイラとしてriscv32-unknown-linux-gnu-gcc(version 10.1.0)がインストールされていることとする。</p>
+<h2 id="build-linux-kernel">Build Linux Kernel</h2>
+<h3 id="linuxのレポジトリをクローンする">Linuxのレポジトリをクローンする。</h3>
+<p>バージョンはv5.11とする。</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">git clone https://github.com/torvalds/linux
+git checkout v5.11
+</code></pre></div><h3 id="依存ツールをインストールする">依存ツールをインストールする。</h3>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">sudo apt install autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev <span class="se">\
+</span><span class="se"></span>                 gawk build-essential bison flex texinfo gperf libtool patchutils bc <span class="se">\
+</span><span class="se"></span>				                  zlib1g-dev libexpat-dev git
+</code></pre></div><h3 id="コンフィグレーションを行う">コンフィグレーションを行う。</h3>
+<p><code>lib/Kconfig.debug</code>の<code>menu &quot;Kernel hacking&quot;</code>の次の行に以下を追記する。
+これで、<code>Kernel hacking</code>の設定項目に<code>Enable Early PRINTK</code>が追加される。</p>
+<pre><code>config EARLY_PRINTK                                                                                                                               
+	bool &quot;Enable Early PRINTK&quot;
+</code></pre><p><code>ARCH=riscv</code>でRISC-Vをアーキテクチャとして指定する。
+<code>arch/$ARCH/configs</code>にデフォルトのdefconfigが用意されている。
+<code>defconfig</code>でデフォルトのコンフィグレーションをもとに<code>.config</code>を作る。
+<code>menuconfig</code>でdefconfigした情報をもとに、手動でコンフィグレーションを行う。</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash"><span class="nb">cd</span> linux
+make <span class="nv">ARCH</span><span class="o">=</span>riscv <span class="nv">CROSS_COMPILE</span><span class="o">=</span>riscv32-unknown-linux-gnu- defconfig
+make <span class="nv">ARCH</span><span class="o">=</span>riscv <span class="nv">CROSS_COMPILE</span><span class="o">=</span>riscv32-unknown-linux-gnu- menuconfig
+</code></pre></div><pre><code>Platform type -&gt; Base ISA =&gt; RV32I
+Platform type -&gt; Symmetric Multi-Processing =&gt; off
+Platform type -&gt; supported PMU type =&gt; Base Performance Monitoring Unit =&gt; off
+Platform type -&gt; FPU support =&gt; off
+Platform type -&gt; Emit compressed instruction when building Linux =&gt; off (UEFI runtime supportのdepends、オフにする)
+Boot options -&gt; UEFI runtime support =&gt; off (Compress instruction emmitionを無効化できるようになる。)
+Kernel features -&gt; Timer frequency =&gt; いい感じにする
+Networking support =&gt; off
+Boot options -&gt; Build-in kernel command line =&gt; earlycon=sbi
+Kernel hacking -&gt; ログレベルを最大にする。
+</code></pre><h4 id="defconfig">defconfig</h4>
+<p>defconfigを保存する。</p>
+<pre><code>make savedefconfig
+cp defconfig arch/riscv/configs/rv32xsoc_defconfig
+</code></pre><p>defconfigを読み込み、.configを作成する。</p>
+<pre><code>make ARCH=riscv CROSS_COMPILE=riscv32-unknown-linux-gnu- rv32xsoc_defconfig
+</code></pre><pre><code>CONFIG_SYSVIPC=y
+CONFIG_NO_HZ_IDLE=y
+CONFIG_HIGH_RES_TIMERS=y
+CONFIG_IKCONFIG=y
+CONFIG_IKCONFIG_PROC=y
+CONFIG_CGROUPS=y
+CONFIG_CGROUP_SCHED=y
+CONFIG_CFS_BANDWIDTH=y
+CONFIG_CGROUP_BPF=y
+CONFIG_NAMESPACES=y
+CONFIG_USER_NS=y
+CONFIG_CHECKPOINT_RESTORE=y
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_EXPERT=y
+# CONFIG_SYSFS_SYSCALL is not set
+CONFIG_BPF_SYSCALL=y
+CONFIG_SOC_SIFIVE=y
+CONFIG_SOC_VIRT=y
+CONFIG_ARCH_RV32I=y
+CONFIG_CMODEL_MEDANY=y
+# CONFIG_RISCV_ISA_C is not set
+# CONFIG_FPU is not set
+CONFIG_CMDLINE=&quot;earlycon=sbi&quot;
+# CONFIG_EFI is not set
+CONFIG_JUMP_LABEL=y
+CONFIG_ARCH_MMAP_RND_BITS=17
+# CONFIG_COMPAT_32BIT_TIME is not set
+CONFIG_MODULES=y
+CONFIG_MODULE_UNLOAD=y
+CONFIG_PAGE_REPORTING=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+# CONFIG_BLK_DEV is not set
+CONFIG_BLK_DEV_SD=y
+CONFIG_SCSI_VIRTIO=y
+CONFIG_ATA=y
+CONFIG_SATA_AHCI_PLATFORM=y
+CONFIG_INPUT_MOUSEDEV=y
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_SERIAL_OF_PLATFORM=y
+CONFIG_SERIAL_EARLYCON_RISCV_SBI=y
+CONFIG_HVC_RISCV_SBI=y
+CONFIG_VIRTIO_CONSOLE=y
+CONFIG_HW_RANDOM=y
+CONFIG_HW_RANDOM_VIRTIO=y
+# CONFIG_HWMON is not set
+CONFIG_DRM=y
+CONFIG_BACKLIGHT_CLASS_DEVICE=y
+CONFIG_FRAMEBUFFER_CONSOLE=y
+# CONFIG_USB_SUPPORT is not set
+# CONFIG_VIRTIO_MENU is not set
+# CONFIG_VHOST_MENU is not set
+# CONFIG_IOMMU_SUPPORT is not set
+CONFIG_RPMSG_VIRTIO=y
+CONFIG_EXT4_FS=y
+CONFIG_EXT4_FS_POSIX_ACL=y
+CONFIG_AUTOFS4_FS=y
+CONFIG_MSDOS_FS=y
+CONFIG_VFAT_FS=y
+CONFIG_TMPFS=y
+CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_KEYS=y
+CONFIG_CRYPTO_DEV_VIRTIO=y
+CONFIG_CRC_ITU_T=y
+CONFIG_CRC7=y
+CONFIG_EARLY_PRINTK=y
+CONFIG_PRINTK_TIME=y
+CONFIG_PRINTK_CALLER=y
+CONFIG_CONSOLE_LOGLEVEL_DEFAULT=15
+CONFIG_CONSOLE_LOGLEVEL_QUIET=15
+CONFIG_MESSAGE_LOGLEVEL_DEFAULT=7
+CONFIG_DYNAMIC_DEBUG=y
+CONFIG_FRAME_WARN=2048
+CONFIG_DEBUG_FS=y
+CONFIG_DEBUG_PAGEALLOC=y
+CONFIG_SCHED_STACK_END_CHECK=y
+CONFIG_DEBUG_VM=y
+CONFIG_DEBUG_VM_VMACACHE=y
+CONFIG_DEBUG_VM_RB=y
+CONFIG_DEBUG_VM_PGFLAGS=y
+CONFIG_DEBUG_VIRTUAL=y
+CONFIG_DEBUG_MEMORY_INIT=y
+CONFIG_SOFTLOCKUP_DETECTOR=y
+CONFIG_WQ_WATCHDOG=y
+CONFIG_DEBUG_TIMEKEEPING=y
+CONFIG_DEBUG_RT_MUTEXES=y
+CONFIG_DEBUG_SPINLOCK=y
+CONFIG_DEBUG_MUTEXES=y
+CONFIG_DEBUG_RWSEMS=y
+CONFIG_DEBUG_ATOMIC_SLEEP=y
+CONFIG_STACKTRACE=y
+CONFIG_DEBUG_LIST=y
+CONFIG_DEBUG_PLIST=y
+CONFIG_DEBUG_SG=y
+CONFIG_RCU_EQS_DEBUG=y
+CONFIG_DEBUG_BLOCK_EXT_DEVT=y
+# CONFIG_FTRACE is not set
+# CONFIG_RUNTIME_TESTING_MENU is not set
+CONFIG_MEMTEST=y
+</code></pre><p>コンフィグレーションは以下のコマンドで削除できる。</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">make mrproper
+</code></pre></div><h3 id="linuxのビルドを行う">Linuxのビルドを行う。</h3>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">make <span class="nv">CFLAGS</span><span class="o">=</span><span class="s2">&#34;-march=rv32ima -mabi=ilp32&#34;</span> <span class="nv">LDFLAGS</span><span class="o">=</span><span class="s2">&#34;-march=rv32ima -mabi=ilp32&#34;</span> <span class="nv">ARCH</span><span class="o">=</span>riscv <span class="nv">CROSS_COMPILE</span><span class="o">=</span>riscv32-unknown-linux-gnu- all -j4
+</code></pre></div><h3 id="opensbiのpayloadとしてビルドする">OpenSBIのPayloadとしてビルドする</h3>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash"><span class="nb">cd</span> rv32x_dev/software/opensbi
+make <span class="nv">CROSS_COMPILE</span><span class="o">=</span>riscv32-unknown-elf- <span class="nv">PLATFORM</span><span class="o">=</span>rv32xsoc <span class="nv">FW_PAYLOAD_PATH</span><span class="o">=</span>~/linux/arch/riscv/boot/Image <span class="nv">FW_FDT_PATH</span><span class="o">=</span>~/rv32x_dev/software/bootrom/rv32xsoc.dtb
+</code></pre></div><h3 id="シミュレーターで実行">シミュレーターで実行</h3>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">clear<span class="p">;</span>./rv32x_simulation ../software/opensbi/build/platform/rv32xsoc/firmware/fw_payload.elf --no-sim-exit --no-log 2&gt;/dev/null
+</code></pre></div><h3 id="references">References</h3>
+<ul>
+<li><a href="https://dtyler.io/articles/2017/12/29/about-kernel-make-config/"target="_blank" rel="noopener noreferrer">https://dtyler.io/articles/2017/12/29/about-kernel-make-config/</a>
+</li>
+<li><a href="http://jborza.com/emulation/2020/04/16/updating-riscv-environment.html"target="_blank" rel="noopener noreferrer">http://jborza.com/emulation/2020/04/16/updating-riscv-environment.html</a>
+</li>
+<li><a href="https://www.atmarkit.co.jp/ait/articles/0808/28/news129_2.html"target="_blank" rel="noopener noreferrer">https://www.atmarkit.co.jp/ait/articles/0808/28/news129_2.html</a>
+</li>
+<li><a href="https://cstmize.hatenablog.jp/entry/2019/10/14/_QEMU%2BOpenSBI%28boot_loader%29%E3%81%A7linux_kernel%E3%81%AE%E8%B5%B7%E5%8B%95"target="_blank" rel="noopener noreferrer">https://cstmize.hatenablog.jp/entry/2019/10/14/_QEMU%2BOpenSBI%28boot_loader%29%E3%81%A7linux_kernel%E3%81%AE%E8%B5%B7%E5%8B%95</a>
+</li>
+<li><a href="https://riscv.org/wp-content/uploads/2019/12/Summit_bootflow.pdf"target="_blank" rel="noopener noreferrer">https://riscv.org/wp-content/uploads/2019/12/Summit_bootflow.pdf</a>
+</li>
+<li><a href="https://risc-v-getting-started-guide.readthedocs.io/en/latest/linux-qemu.html#prerequisites"target="_blank" rel="noopener noreferrer">https://risc-v-getting-started-guide.readthedocs.io/en/latest/linux-qemu.html#prerequisites</a>
+</li>
+</ul></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/cpu/>CPU</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
+</div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/booting_linux_kernel_on_my_riscv_part1/"><span class="iconfont icon-article"></span>Booting linux kernel on my RISC-V part1</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/introduction_to_nsl/"><span class="iconfont icon-article"></span>Next Synthesis Language</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">©2021 koyamanX</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section></body>
+
+</html>

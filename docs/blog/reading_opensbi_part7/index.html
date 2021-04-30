@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>Reading OpenSBI part7&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Reading OpenSBI part7" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">Reading OpenSBI part7</h1><p class="article date">Friday, March 19, 2021</p></section><article class="article markdown-body"><p>今回から、C言語によるOpenSBIの実装を見ていく。
+<code>sbi_trap_handler</code>と<code>sbi_init</code>を読んでいく。</p>
+<h3 id="sbi_trap_handler">sbi_trap_handler</h3>
+<ul>
+<li><code>mscratch</code>は<code>struct sbi_scratch</code>を指している。</li>
+<li><code>regs</code>は<code>_trap_handler</code>(<code>firmware/fw_base.S</code>)にてセーブした(<code>struct sbi_trap_regs</code>)のポインタである(<code>sp</code> in <code>_trap_handler</code>)。</li>
+</ul>
+<p><code>lib/sbi/sbi_trap.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="p">...</span>
+<span class="kt">void</span> <span class="n">sbi_trap_handler</span><span class="p">(</span><span class="k">struct</span> <span class="n">sbi_trap_regs</span> <span class="o">*</span><span class="n">regs</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">int</span> <span class="n">rc</span> <span class="o">=</span> <span class="n">SBI_ENOTSUPP</span><span class="p">;</span>
+	<span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">msg</span> <span class="o">=</span> <span class="s">&#34;trap handler failed&#34;</span><span class="p">;</span>
+	<span class="n">ulong</span> <span class="n">mcause</span> <span class="o">=</span> <span class="n">csr_read</span><span class="p">(</span><span class="n">CSR_MCAUSE</span><span class="p">);</span>
+	<span class="n">ulong</span> <span class="n">mtval</span> <span class="o">=</span> <span class="n">csr_read</span><span class="p">(</span><span class="n">CSR_MTVAL</span><span class="p">),</span> <span class="n">mtval2</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">mtinst</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">sbi_trap_info</span> <span class="n">trap</span><span class="p">;</span>
+
+	<span class="k">if</span> <span class="p">(</span><span class="n">misa_extension</span><span class="p">(</span><span class="sc">&#39;H&#39;</span><span class="p">))</span> <span class="p">{</span>
+		<span class="n">mtval2</span> <span class="o">=</span> <span class="n">csr_read</span><span class="p">(</span><span class="n">CSR_MTVAL2</span><span class="p">);</span>
+		<span class="n">mtinst</span> <span class="o">=</span> <span class="n">csr_read</span><span class="p">(</span><span class="n">CSR_MTINST</span><span class="p">);</span>
+	<span class="p">}</span>
+<span class="p">...</span>
+</code></pre></div><p>トラップの情報はスタック上の(<code>struct sbi_trap_info</code>)に保存する。
+この情報はtrapをリダイレクトする際に用いる。
+H-extensionが有効の場合は、<code>mtval2</code>、<code>mtinst</code>を取得する。(それ以外の場合は<code>0</code>)
+<code>include/sbi/sbi_trap.h</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="p">...</span>
+<span class="cm">/** Representation of trap details */</span>
+<span class="k">struct</span> <span class="n">sbi_trap_info</span> <span class="p">{</span>
+	<span class="cm">/** epc Trap program counter */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">epc</span><span class="p">;</span>
+	<span class="cm">/** cause Trap exception cause */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">cause</span><span class="p">;</span>
+	<span class="cm">/** tval Trap value */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">tval</span><span class="p">;</span>
+	<span class="cm">/** tval2 Trap value 2 */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">tval2</span><span class="p">;</span>
+	<span class="cm">/** tinst Trap instruction */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">tinst</span><span class="p">;</span>
+<span class="p">};</span>
+<span class="p">...</span>
+</code></pre></div><h3 id="interruptのtrap">Interruptのtrap</h3>
+<p><code>mcause</code>の最上位ビットが1のときはInterruptによるトラップである。
+ここでは、M-modeのタイマー割込みおよびM-modeのソフトウエア割込みの対処を行う。
+それぞれ、<code>sbi_timer_process</code>と<code>sbi_ipi_process</code>が受け持つ。
+M-modeの外部割込みは対処しない。(OpenSBIはM-modeで動作する、OpenSBIはM-modeの外部割込みを使用ない)</p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="p">...</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">mcause</span> <span class="o">&amp;</span> <span class="p">(</span><span class="mi">1UL</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">__riscv_xlen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)))</span> <span class="p">{</span>
+		<span class="n">mcause</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="p">(</span><span class="mi">1UL</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">__riscv_xlen</span> <span class="o">-</span> <span class="mi">1</span><span class="p">));</span>
+		<span class="k">switch</span> <span class="p">(</span><span class="n">mcause</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">case</span> <span class="nl">IRQ_M_TIMER</span><span class="p">:</span>
+			<span class="n">sbi_timer_process</span><span class="p">();</span>
+			<span class="k">break</span><span class="p">;</span>
+		<span class="k">case</span> <span class="nl">IRQ_M_SOFT</span><span class="p">:</span>
+			<span class="n">sbi_ipi_process</span><span class="p">();</span>
+			<span class="k">break</span><span class="p">;</span>
+		<span class="k">default</span><span class="o">:</span>
+			<span class="n">msg</span> <span class="o">=</span> <span class="s">&#34;unhandled external interrupt&#34;</span><span class="p">;</span>
+			<span class="k">goto</span> <span class="n">trap_error</span><span class="p">;</span>
+		<span class="p">};</span>
+		<span class="k">return</span><span class="p">;</span>
+	<span class="p">}</span>
+<span class="p">...</span>
+</code></pre></div><h4 id="sbi_timer_process">sbi_timer_process</h4>
+<p><code>lib/sbi/sbi_timer.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="kt">void</span> <span class="nf">sbi_timer_process</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="n">csr_clear</span><span class="p">(</span><span class="n">CSR_MIE</span><span class="p">,</span> <span class="n">MIP_MTIP</span><span class="p">);</span>
+	<span class="n">csr_set</span><span class="p">(</span><span class="n">CSR_MIP</span><span class="p">,</span> <span class="n">MIP_STIP</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div><p><code>sbi_timer_process</code>では、M-modeのタイマー割込みをS-modeのタイマー割込みとして発生させる。
+単に、M-modeのタイマー割込みを停止して(mie.mtip = 0)、S-modeのタイマー割込みを発生させる(mie.stip = 1)。
+現在はM-modeのトラップなので、低位のモードのトラップは遅延する。
+後続の<code>sbi_trap_redirect</code>にて実際にトラップのリダイレクトを行う。</p>
+<h4 id="sbi_ipi_process">sbi_ipi_process</h4>
+<p><code>lib/sbi/sbi_ipi.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="kt">void</span> <span class="nf">sbi_ipi_process</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">ipi_type</span><span class="p">;</span>
+	<span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">ipi_event</span><span class="p">;</span>
+	<span class="k">const</span> <span class="k">struct</span> <span class="n">sbi_ipi_event_ops</span> <span class="o">*</span><span class="n">ipi_ops</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">sbi_scratch</span> <span class="o">*</span><span class="n">scratch</span> <span class="o">=</span> <span class="n">sbi_scratch_thishart_ptr</span><span class="p">();</span>
+	<span class="k">const</span> <span class="k">struct</span> <span class="n">sbi_platform</span> <span class="o">*</span><span class="n">plat</span> <span class="o">=</span> <span class="n">sbi_platform_ptr</span><span class="p">(</span><span class="n">scratch</span><span class="p">);</span>
+	<span class="k">struct</span> <span class="n">sbi_ipi_data</span> <span class="o">*</span><span class="n">ipi_data</span> <span class="o">=</span>
+			<span class="n">sbi_scratch_offset_ptr</span><span class="p">(</span><span class="n">scratch</span><span class="p">,</span> <span class="n">ipi_data_off</span><span class="p">);</span>
+
+	<span class="n">u32</span> <span class="n">hartid</span> <span class="o">=</span> <span class="n">current_hartid</span><span class="p">();</span>
+	<span class="n">sbi_platform_ipi_clear</span><span class="p">(</span><span class="n">plat</span><span class="p">,</span> <span class="n">hartid</span><span class="p">);</span>
+
+	<span class="n">ipi_type</span> <span class="o">=</span> <span class="n">atomic_raw_xchg_ulong</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ipi_data</span><span class="o">-&gt;</span><span class="n">ipi_type</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+	<span class="n">ipi_event</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="k">while</span> <span class="p">(</span><span class="n">ipi_type</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">ipi_type</span> <span class="o">&amp;</span> <span class="mi">1UL</span><span class="p">))</span>
+			<span class="k">goto</span> <span class="n">skip</span><span class="p">;</span>
+
+		<span class="n">ipi_ops</span> <span class="o">=</span> <span class="n">ipi_ops_array</span><span class="p">[</span><span class="n">ipi_event</span><span class="p">];</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">ipi_ops</span> <span class="o">&amp;&amp;</span> <span class="n">ipi_ops</span><span class="o">-&gt;</span><span class="n">process</span><span class="p">)</span>
+			<span class="n">ipi_ops</span><span class="o">-&gt;</span><span class="n">process</span><span class="p">(</span><span class="n">scratch</span><span class="p">);</span>
+
+<span class="nl">skip</span><span class="p">:</span>
+		<span class="n">ipi_type</span> <span class="o">=</span> <span class="n">ipi_type</span> <span class="o">&gt;&gt;</span> <span class="mi">1</span><span class="p">;</span>
+		<span class="n">ipi_event</span><span class="o">++</span><span class="p">;</span>
+	<span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div><p>scratch spaceから<code>struct sbi_ipi_data</code>を取り出している。
+<code>ipi_data</code>は<code>sbi_ipi_init</code>にてscratch spaceに作成している様子。
+<code>ipi_data</code>は<code>sbi_ipi_send</code>にてリモート(ipi先)のhartのscratch spaceにセットする。</p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="k">struct</span> <span class="n">sbi_ipi_data</span> <span class="p">{</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">ipi_type</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div><div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="kt">int</span> <span class="nf">sbi_ipi_init</span><span class="p">(</span><span class="k">struct</span> <span class="n">sbi_scratch</span> <span class="o">*</span><span class="n">scratch</span><span class="p">,</span> <span class="kt">bool</span> <span class="n">cold_boot</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">sbi_ipi_data</span> <span class="o">*</span><span class="n">ipi_data</span><span class="p">;</span>
+
+	<span class="k">if</span> <span class="p">(</span><span class="n">cold_boot</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">ipi_data_off</span> <span class="o">=</span> <span class="n">sbi_scratch_alloc_offset</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">ipi_data</span><span class="p">),</span>
+							<span class="s">&#34;IPI_DATA&#34;</span><span class="p">);</span>
+</code></pre></div><p>取得した<code>ipi_data-&gt;ipi_type</code>を用いて<code>struct sbi_ipi_event_ops ipi_ops_array</code>を索引し<code>ipi_ops</code>を取得、(<code>ipi_ops-&gt;process()</code>)実行する。
+なお、<code>ipi_type</code>のビットポジションが0からの添字に対応している。</p>
+<p><code>include/sbi/sbi_ipi.h</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="cm">/** IPI event operations or callbacks */</span>
+<span class="k">struct</span> <span class="n">sbi_ipi_event_ops</span> <span class="p">{</span>
+	<span class="cm">/** Name of the IPI event operations */</span>
+	<span class="kt">char</span> <span class="n">name</span><span class="p">[</span><span class="mi">32</span><span class="p">];</span>
+
+	<span class="cm">/**
+</span><span class="cm">	 * Update callback to save/enqueue data for remote HART
+</span><span class="cm">	 * Note: This is an optional callback and it is called just before
+</span><span class="cm">	 * triggering IPI to remote HART.
+</span><span class="cm">	 */</span>
+	<span class="kt">int</span> <span class="p">(</span><span class="o">*</span> <span class="n">update</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sbi_scratch</span> <span class="o">*</span><span class="n">scratch</span><span class="p">,</span>
+			<span class="k">struct</span> <span class="n">sbi_scratch</span> <span class="o">*</span><span class="n">remote_scratch</span><span class="p">,</span>
+			<span class="n">u32</span> <span class="n">remote_hartid</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">);</span>
+
+	<span class="cm">/**
+</span><span class="cm">	 * Sync callback to wait for remote HART
+</span><span class="cm">	 * Note: This is an optional callback and it is called just after
+</span><span class="cm">	 * triggering IPI to remote HART.
+</span><span class="cm">	 */</span>
+	<span class="kt">void</span> <span class="p">(</span><span class="o">*</span> <span class="n">sync</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sbi_scratch</span> <span class="o">*</span><span class="n">scratch</span><span class="p">);</span>
+
+	<span class="cm">/**
+</span><span class="cm">	 * Process callback to handle IPI event
+</span><span class="cm">	 * Note: This is a mandatory callback and it is called on the
+</span><span class="cm">	 * remote HART after IPI is triggered.
+</span><span class="cm">	 */</span>
+	<span class="kt">void</span> <span class="p">(</span><span class="o">*</span> <span class="n">process</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sbi_scratch</span> <span class="o">*</span><span class="n">scratch</span><span class="p">);</span>
+<span class="p">};</span>
+</code></pre></div><p><code>struct ipi_event_ops ipi_ops_array</code>は<code>sbi_ipi_event_create</code>を用いて<code>sbi_ipi_init</code>内で初期化される。</p>
+<h3 id="exception-trap">Exception trap</h3>
+<p><code>sbi_trap_handler</code>の続き</p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c">	<span class="k">switch</span> <span class="p">(</span><span class="n">mcause</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">case</span> <span class="nl">CAUSE_ILLEGAL_INSTRUCTION</span><span class="p">:</span>
+		<span class="n">rc</span>  <span class="o">=</span> <span class="n">sbi_illegal_insn_handler</span><span class="p">(</span><span class="n">mtval</span><span class="p">,</span> <span class="n">regs</span><span class="p">);</span>
+		<span class="n">msg</span> <span class="o">=</span> <span class="s">&#34;illegal instruction handler failed&#34;</span><span class="p">;</span>
+		<span class="k">break</span><span class="p">;</span>
+	<span class="k">case</span> <span class="nl">CAUSE_MISALIGNED_LOAD</span><span class="p">:</span>
+		<span class="n">rc</span> <span class="o">=</span> <span class="n">sbi_misaligned_load_handler</span><span class="p">(</span><span class="n">mtval</span><span class="p">,</span> <span class="n">mtval2</span><span class="p">,</span> <span class="n">mtinst</span><span class="p">,</span> <span class="n">regs</span><span class="p">);</span>
+		<span class="n">msg</span> <span class="o">=</span> <span class="s">&#34;misaligned load handler failed&#34;</span><span class="p">;</span>
+		<span class="k">break</span><span class="p">;</span>
+	<span class="k">case</span> <span class="nl">CAUSE_MISALIGNED_STORE</span><span class="p">:</span>
+		<span class="n">rc</span>  <span class="o">=</span> <span class="n">sbi_misaligned_store_handler</span><span class="p">(</span><span class="n">mtval</span><span class="p">,</span> <span class="n">mtval2</span><span class="p">,</span> <span class="n">mtinst</span><span class="p">,</span> <span class="n">regs</span><span class="p">);</span>
+		<span class="n">msg</span> <span class="o">=</span> <span class="s">&#34;misaligned store handler failed&#34;</span><span class="p">;</span>
+		<span class="k">break</span><span class="p">;</span>
+	<span class="k">case</span> <span class="nl">CAUSE_SUPERVISOR_ECALL</span><span class="p">:</span>
+	<span class="k">case</span> <span class="nl">CAUSE_MACHINE_ECALL</span><span class="p">:</span>
+		<span class="n">rc</span>  <span class="o">=</span> <span class="n">sbi_ecall_handler</span><span class="p">(</span><span class="n">regs</span><span class="p">);</span>
+		<span class="n">msg</span> <span class="o">=</span> <span class="s">&#34;ecall handler failed&#34;</span><span class="p">;</span>
+		<span class="k">break</span><span class="p">;</span>
+	<span class="k">default</span><span class="o">:</span>
+		<span class="cm">/* If the trap came from S or U mode, redirect it there */</span>
+		<span class="n">trap</span><span class="p">.</span><span class="n">epc</span> <span class="o">=</span> <span class="n">regs</span><span class="o">-&gt;</span><span class="n">mepc</span><span class="p">;</span>
+		<span class="n">trap</span><span class="p">.</span><span class="n">cause</span> <span class="o">=</span> <span class="n">mcause</span><span class="p">;</span>
+		<span class="n">trap</span><span class="p">.</span><span class="n">tval</span> <span class="o">=</span> <span class="n">mtval</span><span class="p">;</span>
+		<span class="n">trap</span><span class="p">.</span><span class="n">tval2</span> <span class="o">=</span> <span class="n">mtval2</span><span class="p">;</span>
+		<span class="n">trap</span><span class="p">.</span><span class="n">tinst</span> <span class="o">=</span> <span class="n">mtinst</span><span class="p">;</span>
+		<span class="n">rc</span> <span class="o">=</span> <span class="n">sbi_trap_redirect</span><span class="p">(</span><span class="n">regs</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">trap</span><span class="p">);</span>
+		<span class="k">break</span><span class="p">;</span>
+	<span class="p">};</span>
+
+<span class="nl">trap_error</span><span class="p">:</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">rc</span><span class="p">)</span>
+		<span class="n">sbi_trap_error</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">rc</span><span class="p">,</span> <span class="n">mcause</span><span class="p">,</span> <span class="n">mtval</span><span class="p">,</span> <span class="n">mtval2</span><span class="p">,</span> <span class="n">mtinst</span><span class="p">,</span> <span class="n">regs</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div><p>次に、mcauseの最上位ビットが0のパターン(例外によるトラップ)。
+Illegal Instruction Exception, Load Address Misaligned exception, Store AMO Address Misalgined Exception, ECALL From S/M modeは
+OpenSBIによって、トラップする。その後、各例外に対応したハンドラー(<code>sbi_illegal_insn_handler</code>, <code>sbi_misaligned_load_handler</code>, <code>sbi_msialgined_store_handler</code>, <code>sbi_ecall_handler</code>)へ制御を移す。</p>
+<p>それ以外の例外(S-modeもしくはU-mode由来)のものは、それぞれのモードへトラップのコンテキストとともにリダイレクト(<code>sbi_trap_redirect</code>)する。
+なお、delegateされているトラップについては、各モードにてハンドルされ、OpenSBIは感知しない。</p>
+<p><code>sbi_trap_redirect</code>について見ていく。</p>
+<p><code>lib/sbi/sbi_trap.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="p">...</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+		<span class="cm">/* Update S-mode exception info */</span>
+		<span class="n">csr_write</span><span class="p">(</span><span class="n">CSR_STVAL</span><span class="p">,</span> <span class="n">trap</span><span class="o">-&gt;</span><span class="n">tval</span><span class="p">);</span>
+		<span class="n">csr_write</span><span class="p">(</span><span class="n">CSR_SEPC</span><span class="p">,</span> <span class="n">trap</span><span class="o">-&gt;</span><span class="n">epc</span><span class="p">);</span>
+		<span class="n">csr_write</span><span class="p">(</span><span class="n">CSR_SCAUSE</span><span class="p">,</span> <span class="n">trap</span><span class="o">-&gt;</span><span class="n">cause</span><span class="p">);</span>
+
+		<span class="cm">/* Set MEPC to S-mode exception vector base */</span>
+		<span class="n">regs</span><span class="o">-&gt;</span><span class="n">mepc</span> <span class="o">=</span> <span class="n">csr_read</span><span class="p">(</span><span class="n">CSR_STVEC</span><span class="p">);</span>
+
+		<span class="cm">/* Set MPP to S-mode */</span>
+		<span class="n">regs</span><span class="o">-&gt;</span><span class="n">mstatus</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">MSTATUS_MPP</span><span class="p">;</span>
+		<span class="n">regs</span><span class="o">-&gt;</span><span class="n">mstatus</span> <span class="o">|=</span> <span class="p">(</span><span class="n">PRV_S</span> <span class="o">&lt;&lt;</span> <span class="n">MSTATUS_MPP_SHIFT</span><span class="p">);</span>
+
+		<span class="cm">/* Set SPP for S-mode */</span>
+		<span class="n">regs</span><span class="o">-&gt;</span><span class="n">mstatus</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">MSTATUS_SPP</span><span class="p">;</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">prev_mode</span> <span class="o">==</span> <span class="n">PRV_S</span><span class="p">)</span>
+			<span class="n">regs</span><span class="o">-&gt;</span><span class="n">mstatus</span> <span class="o">|=</span> <span class="p">(</span><span class="mi">1UL</span> <span class="o">&lt;&lt;</span> <span class="n">MSTATUS_SPP_SHIFT</span><span class="p">);</span>
+
+		<span class="cm">/* Set SPIE for S-mode */</span>
+		<span class="n">regs</span><span class="o">-&gt;</span><span class="n">mstatus</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">MSTATUS_SPIE</span><span class="p">;</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">regs</span><span class="o">-&gt;</span><span class="n">mstatus</span> <span class="o">&amp;</span> <span class="n">MSTATUS_SIE</span><span class="p">)</span>
+			<span class="n">regs</span><span class="o">-&gt;</span><span class="n">mstatus</span> <span class="o">|=</span> <span class="p">(</span><span class="mi">1UL</span> <span class="o">&lt;&lt;</span> <span class="n">MSTATUS_SPIE_SHIFT</span><span class="p">);</span>
+
+		<span class="cm">/* Clear SIE for S-mode */</span>
+		<span class="n">regs</span><span class="o">-&gt;</span><span class="n">mstatus</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">MSTATUS_SIE</span><span class="p">;</span>
+	<span class="p">}</span>
+</code></pre></div><p>M-modeのトラップコンテキストをS-modeへ移している。
+M-modeのトラップハンドラーを<code>mret</code>したあとに、S-modeのトラップハンドラへ制御が移る。</p>
+<h2 id="sbi_init">sbi_init</h2>
+<p><code>lib/sbi/sbi_init.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="kt">void</span> <span class="n">__noreturn</span> <span class="nf">sbi_init</span><span class="p">(</span><span class="k">struct</span> <span class="n">sbi_scratch</span> <span class="o">*</span><span class="n">scratch</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">bool</span> <span class="n">next_mode_supported</span>	<span class="o">=</span> <span class="n">FALSE</span><span class="p">;</span>
+	<span class="kt">bool</span> <span class="n">coldboot</span>			<span class="o">=</span> <span class="n">FALSE</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">hartid</span>			<span class="o">=</span> <span class="n">current_hartid</span><span class="p">();</span>
+	<span class="k">const</span> <span class="k">struct</span> <span class="n">sbi_platform</span> <span class="o">*</span><span class="n">plat</span> <span class="o">=</span> <span class="n">sbi_platform_ptr</span><span class="p">(</span><span class="n">scratch</span><span class="p">);</span>
+
+	<span class="k">if</span> <span class="p">((</span><span class="n">SBI_HARTMASK_MAX_BITS</span> <span class="o">&lt;=</span> <span class="n">hartid</span><span class="p">)</span> <span class="o">||</span>
+	    <span class="n">sbi_platform_hart_invalid</span><span class="p">(</span><span class="n">plat</span><span class="p">,</span> <span class="n">hartid</span><span class="p">))</span>
+		<span class="n">sbi_hart_hang</span><span class="p">();</span>
+
+	<span class="k">switch</span> <span class="p">(</span><span class="n">scratch</span><span class="o">-&gt;</span><span class="n">next_mode</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">case</span> <span class="nl">PRV_M</span><span class="p">:</span>
+		<span class="n">next_mode_supported</span> <span class="o">=</span> <span class="n">TRUE</span><span class="p">;</span>
+		<span class="k">break</span><span class="p">;</span>
+	<span class="k">case</span> <span class="nl">PRV_S</span><span class="p">:</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">misa_extension</span><span class="p">(</span><span class="sc">&#39;S&#39;</span><span class="p">))</span>
+			<span class="n">next_mode_supported</span> <span class="o">=</span> <span class="n">TRUE</span><span class="p">;</span>
+		<span class="k">break</span><span class="p">;</span>
+	<span class="k">case</span> <span class="nl">PRV_U</span><span class="p">:</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">misa_extension</span><span class="p">(</span><span class="sc">&#39;U&#39;</span><span class="p">))</span>
+			<span class="n">next_mode_supported</span> <span class="o">=</span> <span class="n">TRUE</span><span class="p">;</span>
+		<span class="k">break</span><span class="p">;</span>
+	<span class="k">default</span><span class="o">:</span>
+		<span class="n">sbi_hart_hang</span><span class="p">();</span>
+	<span class="p">}</span>
+
+	<span class="cm">/*
+</span><span class="cm">	 * Only the HART supporting privilege mode specified in the
+</span><span class="cm">	 * scratch-&gt;next_mode should be allowed to become the coldboot
+</span><span class="cm">	 * HART because the coldboot HART will be directly jumping to
+</span><span class="cm">	 * the next booting stage.
+</span><span class="cm">	 *
+</span><span class="cm">	 * We use a lottery mechanism to select coldboot HART among
+</span><span class="cm">	 * HARTs which satisfy above condition.
+</span><span class="cm">	 */</span>
+
+	<span class="k">if</span> <span class="p">(</span><span class="n">next_mode_supported</span> <span class="o">&amp;&amp;</span> <span class="n">atomic_xchg</span><span class="p">(</span><span class="o">&amp;</span><span class="n">coldboot_lottery</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+		<span class="n">coldboot</span> <span class="o">=</span> <span class="n">TRUE</span><span class="p">;</span>
+
+	<span class="k">if</span> <span class="p">(</span><span class="n">coldboot</span><span class="p">)</span>
+		<span class="n">init_coldboot</span><span class="p">(</span><span class="n">scratch</span><span class="p">,</span> <span class="n">hartid</span><span class="p">);</span>
+	<span class="k">else</span>
+		<span class="n">init_warmboot</span><span class="p">(</span><span class="n">scratch</span><span class="p">,</span> <span class="n">hartid</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div><p><code>coldboot</code>を<code>coldboot_lottery</code>よりはじめに<code>atomic_xchg</code>で0を読み出したhart(特権モード必須)が担当する。
+<code>init_coldboot</code>は次のレベルのクライアントプログラムにジャンプする。
+その他のコアは<code>init_warmboot</code>する。</p>
+<p><code>sbi_init</code>については、以下のリンク先のサイトがわかりやすい。(Versionが違うことに注意)</p>
+<ul>
+<li><a href="https://cstmize.hatenablog.jp/entry/2019/10/21/OpenSBI%E3%81%AE%E5%86%85%E9%83%A8%E5%AE%9F%E8%A3%85%28boot~linux_kernel%E3%82%92%E5%AE%9F%E8%A1%8C%E3%81%99%E3%82%8B%E3%81%BE%E3%81%A7%29"target="_blank" rel="noopener noreferrer">OpenSBIの内部実装(boot~linux kernelを実行するまで)</a>
+</li>
+</ul>
+<p>OpenSBIから制御が移ると、クライアントプログラムからOpenSBIへ移る手段はトラップのみである。
+上のリンクにも上がっていたが、どのトラップがトリガーになっているかしっかり調べておく。</p>
+<h2 id="delegate_traps">delegate_traps</h2>
+<p><code>delegate_traps</code>は<code>lib/sbi/sbi_hart.c</code>で定義されている関数で、低位の特権モードへトラップをDelegationを設定する。
+<code>delegate_traps</code>は<code>sbi_init</code>中<code>sbi_hart_init</code>で呼ばれる。
+Delegateされていないトラップについては、M-modeでOpenSBIにハンドルされることとなる。</p>
+<p><code>lib/sbi/sbi_hart.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="k">static</span> <span class="kt">int</span> <span class="nf">delegate_traps</span><span class="p">(</span><span class="k">struct</span> <span class="n">sbi_scratch</span> <span class="o">*</span><span class="n">scratch</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">const</span> <span class="k">struct</span> <span class="n">sbi_platform</span> <span class="o">*</span><span class="n">plat</span> <span class="o">=</span> <span class="n">sbi_platform_ptr</span><span class="p">(</span><span class="n">scratch</span><span class="p">);</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">interrupts</span><span class="p">,</span> <span class="n">exceptions</span><span class="p">;</span>
+
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">misa_extension</span><span class="p">(</span><span class="sc">&#39;S&#39;</span><span class="p">))</span>
+		<span class="cm">/* No delegation possible as mideleg does not exist */</span>
+		<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+	<span class="cm">/* Send M-mode interrupts and most exceptions to S-mode */</span>
+	<span class="n">interrupts</span> <span class="o">=</span> <span class="n">MIP_SSIP</span> <span class="o">|</span> <span class="n">MIP_STIP</span> <span class="o">|</span> <span class="n">MIP_SEIP</span><span class="p">;</span>
+	<span class="n">exceptions</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_MISALIGNED_FETCH</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_BREAKPOINT</span><span class="p">)</span> <span class="o">|</span>
+		     <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_USER_ECALL</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">sbi_platform_has_mfaults_delegation</span><span class="p">(</span><span class="n">plat</span><span class="p">))</span>
+		<span class="n">exceptions</span> <span class="o">|=</span> <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_FETCH_PAGE_FAULT</span><span class="p">)</span> <span class="o">|</span>
+			      <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_LOAD_PAGE_FAULT</span><span class="p">)</span> <span class="o">|</span>
+			      <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_STORE_PAGE_FAULT</span><span class="p">);</span>
+
+	<span class="cm">/*
+</span><span class="cm">	 * If hypervisor extension available then we only handle hypervisor
+</span><span class="cm">	 * calls (i.e. ecalls from HS-mode) in M-mode.
+</span><span class="cm">	 *
+</span><span class="cm">	 * The HS-mode will additionally handle supervisor calls (i.e. ecalls
+</span><span class="cm">	 * from VS-mode), Guest page faults and Virtual interrupts.
+</span><span class="cm">	 */</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">misa_extension</span><span class="p">(</span><span class="sc">&#39;H&#39;</span><span class="p">))</span> <span class="p">{</span>
+		<span class="n">exceptions</span> <span class="o">|=</span> <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_VIRTUAL_SUPERVISOR_ECALL</span><span class="p">);</span>
+		<span class="n">exceptions</span> <span class="o">|=</span> <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_FETCH_GUEST_PAGE_FAULT</span><span class="p">);</span>
+		<span class="n">exceptions</span> <span class="o">|=</span> <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_LOAD_GUEST_PAGE_FAULT</span><span class="p">);</span>
+		<span class="n">exceptions</span> <span class="o">|=</span> <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_VIRTUAL_INST_FAULT</span><span class="p">);</span>
+		<span class="n">exceptions</span> <span class="o">|=</span> <span class="p">(</span><span class="mi">1U</span> <span class="o">&lt;&lt;</span> <span class="n">CAUSE_STORE_GUEST_PAGE_FAULT</span><span class="p">);</span>
+	<span class="p">}</span>
+
+	<span class="n">csr_write</span><span class="p">(</span><span class="n">CSR_MIDELEG</span><span class="p">,</span> <span class="n">interrupts</span><span class="p">);</span>
+	<span class="n">csr_write</span><span class="p">(</span><span class="n">CSR_MEDELEG</span><span class="p">,</span> <span class="n">exceptions</span><span class="p">);</span>
+
+	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><p>当たり前だが、S-modeがない場合はdelagetionはできない。</p>
+<h4 id="割込みdelegationの設定">割込みdelegationの設定</h4>
+<ul>
+<li>Supervisor Software Interrput</li>
+<li>Supervisor Timer Interrput</li>
+<li>Supervisor External Interrput</li>
+</ul>
+<h4 id="例外delegationの設定">例外delegationの設定</h4>
+<ul>
+<li>Environment Call From U Mode</li>
+<li>Instruction Address Misaligned</li>
+<li>Environment breakpoint</li>
+<li>Instruction Page Fault	(satpありの場合)</li>
+<li>Load Page Fault			(satpありの場合)</li>
+<li>Store AMO Page Fault		(satpありの場合)</li>
+</ul>
+<p>上にリストしたものに関してはS-mode以下の特権モードにてハンドルされる。</p>
+<p>これでなんとなくであるが、OpenSBIを理解した。
+今後、OpenSBIとクライアントプログラムのやり取りがわからなくなったら深堀していこうとおもう。</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
+</div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part1/"><span class="iconfont icon-article"></span>Reading linux kernel part1</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part6/"><span class="iconfont icon-article"></span>Reading OpenSBI part6</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">©2021 koyamanX</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section></body>
+
+</html>

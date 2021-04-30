@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>My RISC-V debug feature part1&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="My RISC-V debug feature part1" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">My RISC-V debug feature part1</h1><p class="article date">Tuesday, April 6, 2021</p></section><article class="article markdown-body"><p>RISC-VプロセッサのシミュレータはVerilog HDLからVerilatorにてC++へ変換して、ソフトウエアとして構築している。
+そろそろまともな実機テスト環境を整えたくなってきたので、FPGA上で検証できるシステムを構築する。</p>
+<h2 id="デバック環境の検討">デバック環境の検討</h2>
+<p>RISC-Vでは、RISC-V Debug Mode<a href="https://github.com/riscv/riscv-debug-spec"target="_blank" rel="noopener noreferrer">RISC-V debug spec</a>
+が定義されている。
+この仕様では、デバック用の機能をまとめており、gdbなどはこの機能が実装されていることを前提としている。
+オレオレの仕様でも良さそうではあるけれど、ツールをの移植など対応させるのが非常にめんどうくさい。
+そこで、RISC-V Debugに沿った実装を行う。
+これは、通信のプロトコルについては規定していない。
+プロトコルはJTAGやSWDなどいろいろあるが、大体はOpenOCDが頑張ってくれる。
+Intel FPGAの場合は、Virtual JTAGがあって、デザインの中でインスタンス化すると、USB Blasterケーブルを通してモジュールと通信できるよう。</p>
+<p>そこで、今回はUSBケーブルを通して、JTAG(VJTAG)にてFPAG &lt;-&gt; PC間の通信をする。
+制御用のソフトウエアはOpenOCDを用いる。
+デバッカはgdbを用いる。
+今回実装すべきなのは、VJTAG &lt;-&gt; RISC-V間のデータパスと制御である。</p>
+<p>RISC-V Debugの仕様では、以下の図に対応する。
+Debug Transport HardwareはUSBダウンロードケーブルとなる。
+DTMでは、VJTAGで受け取ったデータをデバック用の命令に変換し、DMIというバスを通して、DMへ送る。
+DMは命令をもとに、プロセッサの状態を制御する。
+プロセッサはデバックモードの実装が必要となる。
+なお、点線の部分は任意の実装となる。
+とりあえず、最小限の実装をする。
+<span class="image-container"><span class="link" ><a href="./image00.png" 
+        target="_blank"><img class="img" src="./image00.png"/></a></span>
+</span></p>
+<h2 id="やること">やること</h2>
+<ul>
+<li>仕様の調査</li>
+<li>実装の調査</li>
+<li>VJTAGの調査とテスト</li>
+<li>OpenOCDを使った、VJTAGの制御</li>
+<li>Debug modeの実装</li>
+<li>DTM, DMの実装</li>
+<li>gdbによる実機テスト</li>
+</ul>
+<p>こんな感じで進めていく。
+まずは、Debug specをしっかり読んでいく。前に読んだときはさっぱりで諦めた(小声)</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/risc-v/>RISC-V</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/jtag/>JTAG</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/fpga/>FPGA</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
+</div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part2/"><span class="iconfont icon-article"></span>My RISC-V debug feature part2</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part6/"><span class="iconfont icon-article"></span>Reading linux kernel part6</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">©2021 koyamanX</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section></body>
+
+</html>

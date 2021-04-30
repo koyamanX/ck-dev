@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>Reading OpenSBI part4&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Reading OpenSBI part4" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">Reading OpenSBI part4</h1><p class="article date">Wednesday, March 17, 2021</p></section><article class="article markdown-body"><h2 id="概要">概要</h2>
+<p><a href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part3/">前回</a>
+。
+今回はプラットフォームの初期化に入る。</p>
+<p><code>firmware/fw_base.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">Initialize</span> <span class="no">platform</span>
+	 <span class="err">*</span> <span class="nl">Note:</span> <span class="nf">The</span> <span class="no">a0</span> <span class="no">to</span> <span class="no">a4</span> <span class="no">registers</span> <span class="no">passed</span> <span class="no">to</span> <span class="no">the</span>
+	 <span class="err">*</span> <span class="nf">firmware</span> <span class="no">are</span> <span class="no">parameters</span> <span class="no">to</span> <span class="no">this</span> <span class="no">function.</span>
+	 <span class="err">*/</span>
+	<span class="nf">MOV_5R</span>	<span class="no">s0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s2</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">s3</span><span class="p">,</span> <span class="no">a3</span><span class="p">,</span> <span class="no">s4</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="nf">call</span>	<span class="no">fw_platform_init</span>
+	<span class="nf">add</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">MOV_5R</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">s2</span><span class="p">,</span> <span class="no">a3</span><span class="p">,</span> <span class="no">s3</span><span class="p">,</span> <span class="no">a4</span><span class="p">,</span> <span class="no">s4</span>
+	<span class="nf">add</span>	<span class="no">a1</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">zero</span>
+
+	<span class="err">/*</span> <span class="nf">Preload</span> <span class="no">HART</span> <span class="no">details</span>
+	 <span class="err">*</span> <span class="nf">s7</span> <span class="p">-</span><span class="err">&gt;</span> <span class="no">HART</span> <span class="no">Count</span>
+	 <span class="err">*</span> <span class="nf">s8</span> <span class="p">-</span><span class="err">&gt;</span> <span class="no">HART</span> <span class="no">Stack</span> <span class="no">Size</span>
+	 <span class="err">*/</span>
+	<span class="nf">la</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">platform</span>
+<span class="c">#if __riscv_xlen == 64
+</span><span class="c"></span>	<span class="nf">lwu</span>	<span class="no">s7</span><span class="p">,</span> <span class="no">SBI_PLATFORM_HART_COUNT_OFFSET</span><span class="p">(</span><span class="no">a4</span><span class="p">)</span>
+	<span class="nf">lwu</span>	<span class="no">s8</span><span class="p">,</span> <span class="no">SBI_PLATFORM_HART_STACK_SIZE_OFFSET</span><span class="p">(</span><span class="no">a4</span><span class="p">)</span>
+<span class="c">#else
+</span><span class="c"></span>	<span class="nf">lw</span>	<span class="no">s7</span><span class="p">,</span> <span class="no">SBI_PLATFORM_HART_COUNT_OFFSET</span><span class="p">(</span><span class="no">a4</span><span class="p">)</span>
+	<span class="nf">lw</span>	<span class="no">s8</span><span class="p">,</span> <span class="no">SBI_PLATFORM_HART_STACK_SIZE_OFFSET</span><span class="p">(</span><span class="no">a4</span><span class="p">)</span>
+<span class="c">#endif
+</span><span class="c"></span>
+	<span class="err">/*</span> <span class="nf">Setup</span> <span class="no">scratch</span> <span class="no">space</span> <span class="no">for</span> <span class="no">all</span> <span class="no">the</span> <span class="no">HARTs</span><span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span>	<span class="no">tp</span><span class="p">,</span> <span class="no">_fw_end</span>
+	<span class="nf">mul</span>	<span class="no">a5</span><span class="p">,</span> <span class="no">s7</span><span class="p">,</span> <span class="no">s8</span>
+	<span class="nf">add</span>	<span class="no">tp</span><span class="p">,</span> <span class="no">tp</span><span class="p">,</span> <span class="no">a5</span>
+	<span class="err">/*</span> <span class="nf">Keep</span> <span class="no">a</span> <span class="no">copy</span> <span class="no">of</span> <span class="no">tp</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">tp</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="err">/*</span> <span class="nf">Counter</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">li</span>	<span class="no">t2</span><span class="p">,</span> <span class="mi">1</span>
+	<span class="err">/*</span> <span class="nf">hartid</span> <span class="mi">0</span> <span class="no">is</span> <span class="no">mandated</span> <span class="no">by</span> <span class="no">ISA</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">li</span>	<span class="no">t1</span><span class="p">,</span> <span class="mi">0</span>
+<span class="nl">_scratch_init:</span>
+	<span class="nf">add</span>	<span class="no">tp</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">mul</span>	<span class="no">a5</span><span class="p">,</span> <span class="no">s8</span><span class="p">,</span> <span class="no">t1</span>
+	<span class="nf">sub</span>	<span class="no">tp</span><span class="p">,</span> <span class="no">tp</span><span class="p">,</span> <span class="no">a5</span>
+	<span class="nf">li</span>	<span class="no">a5</span><span class="p">,</span> <span class="no">SBI_SCRATCH_SIZE</span>
+	<span class="nf">sub</span>	<span class="no">tp</span><span class="p">,</span> <span class="no">tp</span><span class="p">,</span> <span class="no">a5</span>
+
+	<span class="err">/*</span> <span class="nf">Initialize</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="err">/*</span> <span class="nf">Store</span> <span class="no">fw_start</span> <span class="no">and</span> <span class="no">fw_size</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">_fw_start</span>
+	<span class="nf">la</span>	<span class="no">a5</span><span class="p">,</span> <span class="no">_fw_end</span>
+	<span class="nf">mul</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">s7</span><span class="p">,</span> <span class="no">s8</span>
+	<span class="nf">add</span>	<span class="no">a5</span><span class="p">,</span> <span class="no">a5</span><span class="p">,</span> <span class="no">t0</span>
+	<span class="nf">sub</span>	<span class="no">a5</span><span class="p">,</span> <span class="no">a5</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="nf">REG_S</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">SBI_SCRATCH_FW_START_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="nf">REG_S</span>	<span class="no">a5</span><span class="p">,</span> <span class="no">SBI_SCRATCH_FW_SIZE_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="err">/*</span> <span class="nf">Store</span> <span class="no">next</span> <span class="no">arg1</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">MOV_3R</span>	<span class="no">s0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s2</span><span class="p">,</span> <span class="no">a2</span>
+	<span class="nf">call</span>	<span class="no">fw_next_arg1</span>
+	<span class="nf">REG_S</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">SBI_SCRATCH_NEXT_ARG1_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="nf">MOV_3R</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">s2</span>
+	<span class="err">/*</span> <span class="nf">Store</span> <span class="no">next</span> <span class="no">address</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">MOV_3R</span>	<span class="no">s0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s2</span><span class="p">,</span> <span class="no">a2</span>
+	<span class="nf">call</span>	<span class="no">fw_next_addr</span>
+	<span class="nf">REG_S</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">SBI_SCRATCH_NEXT_ADDR_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="nf">MOV_3R</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">s2</span>
+	<span class="err">/*</span> <span class="nf">Store</span> <span class="no">next</span> <span class="no">mode</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">MOV_3R</span>	<span class="no">s0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s2</span><span class="p">,</span> <span class="no">a2</span>
+	<span class="nf">call</span>	<span class="no">fw_next_mode</span>
+	<span class="nf">REG_S</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">SBI_SCRATCH_NEXT_MODE_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="nf">MOV_3R</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">s2</span>
+	<span class="err">/*</span> <span class="nf">Store</span> <span class="no">warm_boot</span> <span class="no">address</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">_start_warm</span>
+	<span class="nf">REG_S</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">SBI_SCRATCH_WARMBOOT_ADDR_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="err">/*</span> <span class="nf">Store</span> <span class="no">platform</span> <span class="no">address</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">platform</span>
+	<span class="nf">REG_S</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">SBI_SCRATCH_PLATFORM_ADDR_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="err">/*</span> <span class="nf">Store</span> <span class="no">hartid-to-scratch</span> <span class="no">function</span> <span class="no">address</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">_hartid_to_scratch</span>
+	<span class="nf">REG_S</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">SBI_SCRATCH_HARTID_TO_SCRATCH_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="err">/*</span> <span class="nf">Store</span> <span class="no">trap-exit</span> <span class="no">function</span> <span class="no">address</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">_trap_exit</span>
+	<span class="nf">REG_S</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">SBI_SCRATCH_TRAP_EXIT_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="err">/*</span> <span class="nf">Clear</span> <span class="no">tmp0</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">REG_S</span>	<span class="no">zero</span><span class="p">,</span> <span class="no">SBI_SCRATCH_TMP0_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="err">/*</span> <span class="nf">Store</span> <span class="no">firmware</span> <span class="no">options</span> <span class="no">in</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">MOV_3R</span>	<span class="no">s0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s2</span><span class="p">,</span> <span class="no">a2</span>
+<span class="c">#ifdef FW_OPTIONS
+</span><span class="c"></span>	<span class="nf">li</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">FW_OPTIONS</span>
+<span class="c">#else
+</span><span class="c"></span>	<span class="nf">call</span>	<span class="no">fw_options</span>
+<span class="c">#endif
+</span><span class="c"></span>	<span class="nf">REG_S</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">SBI_SCRATCH_OPTIONS_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="nf">MOV_3R</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">s2</span>
+	<span class="err">/*</span> <span class="nf">Move</span> <span class="no">to</span> <span class="no">next</span> <span class="no">scratch</span> <span class="no">space</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">t2</span>
+	<span class="nf">blt</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">s7</span><span class="p">,</span> <span class="no">_scratch_init</span>
+<span class="na">...</span>
+</code></pre></div><h3 id="fw_platform_init">fw_platform_init</h3>
+<p>まずは、レジスタの退避<code>(s0, s1, s2, s3, s4) &lt;- (a0, a1, a2, a3, a4)</code><br>
+<code>fw_platform_init</code>の呼び出し。</p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
+	<span class="na">.section</span> <span class="no">.entry</span><span class="p">,</span> <span class="s">&#34;ax&#34;</span><span class="p">,</span> <span class="err">%</span><span class="no">progbits</span>
+	<span class="na">.align</span> <span class="mi">3</span>
+	<span class="na">.globl</span> <span class="no">fw_platform_init</span>
+	<span class="na">.weak</span> <span class="no">fw_platform_init</span>
+<span class="nl">fw_platform_init:</span>
+	<span class="nf">add</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">ret</span>
+<span class="na">...</span>
+</code></pre></div><p><code>fw_platform_init</code>は<code>.weak</code>で定義されている。プラットフォームにて、必要に応じで上書き実装することとなる。今回は、特に実装しないのでこのままでよい。
+<code>t0</code>レジスタに返り値(<code>a0</code>)を保存。<br>
+レジスタの復帰<code>(a0, a1, a2, a3, a4) &lt;- (s0, s1, s2, s3, s4)</code><br>
+<code>a1</code>に<code>t0</code>を保存。</p>
+<h3 id="hartごとのscratch-areaの作成struct-sbi_scratch">hartごとのscratch areaの作成(struct sbi_scratch)</h3>
+<p>次に<code>a4</code>レジスタに<code>struct sbi_platform platform</code>のアドレスを代入する。
+<code>platform</code>はプラットフォームの情報を持っている構造体であり、<code>include/sbi/sbi_platform.h</code>に宣言されている。
+この構造体より、hartの数とhartのスタックサイズをそれぞれ<code>s7</code>、<code>s8</code>レジスタへロードする。</p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="p">...</span>
+<span class="cm">/** Offset of hart_count in struct sbi_platform */</span>
+<span class="cp">#define SBI_PLATFORM_HART_COUNT_OFFSET (0x50)
+</span><span class="cp"></span><span class="cm">/** Offset of hart_stack_size in struct sbi_platform */</span>
+<span class="cp">#define SBI_PLATFORM_HART_STACK_SIZE_OFFSET (0x54)
+</span><span class="cp"></span><span class="p">...</span>
+<span class="k">struct</span> <span class="n">sbi_platform</span> <span class="p">{</span>
+	<span class="cm">/**
+</span><span class="cm">	 * OpenSBI version this sbi_platform is based on.
+</span><span class="cm">	 * It&#39;s a 32-bit value where upper 16-bits are major number
+</span><span class="cm">	 * and lower 16-bits are minor number
+</span><span class="cm">	 */</span>
+	<span class="n">u32</span> <span class="n">opensbi_version</span><span class="p">;</span>
+	<span class="cm">/**
+</span><span class="cm">	 * OpenSBI platform version released by vendor.
+</span><span class="cm">	 * It&#39;s a 32-bit value where upper 16-bits are major number
+</span><span class="cm">	 * and lower 16-bits are minor number
+</span><span class="cm">	 */</span>
+	<span class="n">u32</span> <span class="n">platform_version</span><span class="p">;</span>
+	<span class="cm">/** Name of the platform */</span>
+	<span class="kt">char</span> <span class="n">name</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+	<span class="cm">/** Supported features */</span>
+	<span class="n">u64</span> <span class="n">features</span><span class="p">;</span>
+	<span class="cm">/** Total number of HARTs */</span>
+	<span class="n">u32</span> <span class="n">hart_count</span><span class="p">;</span>
+	<span class="cm">/** Per-HART stack size for exception/interrupt handling */</span>
+	<span class="n">u32</span> <span class="n">hart_stack_size</span><span class="p">;</span>
+	<span class="cm">/** Pointer to sbi platform operations */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">platform_ops_addr</span><span class="p">;</span>
+	<span class="cm">/** Pointer to system firmware specific context */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">firmware_context</span><span class="p">;</span>
+	<span class="cm">/**
+</span><span class="cm">	 * HART index to HART id table
+</span><span class="cm">	 *
+</span><span class="cm">	 * For used HART index &lt;abc&gt;:
+</span><span class="cm">	 *     hart_index2id[&lt;abc&gt;] = some HART id
+</span><span class="cm">	 * For unused HART index &lt;abc&gt;:
+</span><span class="cm">	 *     hart_index2id[&lt;abc&gt;] = -1U
+</span><span class="cm">	 *
+</span><span class="cm">	 * If hart_index2id == NULL then we assume identity mapping
+</span><span class="cm">	 *     hart_index2id[&lt;abc&gt;] = &lt;abc&gt;
+</span><span class="cm">	 *
+</span><span class="cm">	 * We have only two restrictions:
+</span><span class="cm">	 * 1. HART index &lt; sbi_platform hart_count
+</span><span class="cm">	 * 2. HART id &lt; SBI_HARTMASK_MAX_BITS
+</span><span class="cm">	 */</span>
+	<span class="k">const</span> <span class="n">u32</span> <span class="o">*</span><span class="n">hart_index2id</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">__packed</span><span class="p">;</span>
+<span class="p">...</span>
+</code></pre></div><h4 id="scratch-spaceの作成">scratch spaceの作成</h4>
+<p>取り出した情報をもとにすべてのhartに対するscratch spaceを用意する。
+<code>_fw_end</code>をベースアドレスして、<code>hart count * hart stack size</code>をオフセットする。
+このアドレスを<code>tp</code>レジスタへ入れる。<code>tp</code>レジスタから相対でアドレス生成することで、scratch spaceにアクセスする。
+<code>t3</code>レジスタへ<code>tp</code>を保存する。
+<code>t2</code>レジスタに１、<code>t1</code>レジスタに0をいれる。
+<code>t1</code>レジスタは現在処理しているhartを表し、<code>t1+t2</code>は次のhartidを示す。</p>
+<h4 id="_scratch_init">_scratch_init</h4>
+<p><code>_scratch_init</code>はhart count回行い、すべてのhartに対して行う。</p>
+<p><code>tp</code>レジスタに<code>t3</code>レジスタを代入する。これは<code>_scratch_init</code>前に保存した<code>tp</code>の(scratch space)のアドレス
+次に、現在処理しているhart用のscratch spaceの<code>tp</code>からのオフセットを計算する。
+<code>s8 * t1</code>にて、<code>hart stack size * current hartid</code>で計算する。
+<code>tp</code>からSBI_SCRATCH_SIZEを引き去る。
+<code>tp</code>はhartごとのscratch spaceのベースアドレスを指す。</p>
+<p><span class="image-container"><span class="link" ><a href="./image00.png" 
+        target="_blank"><img class="img" src="./image00.png"/></a></span>
+</span>
+scratch構造体を各hartのscratch spaceへ作成する。</p>
+<p><code>include/sbi/sbi_scratch.h</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="p">...</span>
+<span class="cm">/** Offset of fw_start member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_FW_START_OFFSET		(0 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of fw_size member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_FW_SIZE_OFFSET		(1 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of next_arg1 member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_NEXT_ARG1_OFFSET		(2 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of next_addr member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_NEXT_ADDR_OFFSET		(3 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of next_mode member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_NEXT_MODE_OFFSET		(4 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of warmboot_addr member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_WARMBOOT_ADDR_OFFSET	(5 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of platform_addr member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_PLATFORM_ADDR_OFFSET	(6 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of hartid_to_scratch member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_HARTID_TO_SCRATCH_OFFSET	(7 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of trap_exit member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_TRAP_EXIT_OFFSET		(8 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of tmp0 member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_TMP0_OFFSET			(9 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of options member in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_OPTIONS_OFFSET		(10 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Offset of extra space in sbi_scratch */</span>
+<span class="cp">#define SBI_SCRATCH_EXTRA_SPACE_OFFSET		(11 * __SIZEOF_POINTER__)
+</span><span class="cp"></span><span class="cm">/** Maximum size of sbi_scratch (4KB) */</span>
+<span class="cp">#define SBI_SCRATCH_SIZE			(0x1000)
+</span><span class="cp"></span>
+
+<span class="p">...</span>
+<span class="cm">/** Representation of per-HART scratch space */</span>
+<span class="k">struct</span> <span class="n">sbi_scratch</span> <span class="p">{</span>
+	<span class="cm">/** Start (or base) address of firmware linked to OpenSBI library */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">fw_start</span><span class="p">;</span>
+	<span class="cm">/** Size (in bytes) of firmware linked to OpenSBI library */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">fw_size</span><span class="p">;</span>
+	<span class="cm">/** Arg1 (or &#39;a1&#39; register) of next booting stage for this HART */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">next_arg1</span><span class="p">;</span>
+	<span class="cm">/** Address of next booting stage for this HART */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">next_addr</span><span class="p">;</span>
+	<span class="cm">/** Priviledge mode of next booting stage for this HART */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">next_mode</span><span class="p">;</span>
+	<span class="cm">/** Warm boot entry point address for this HART */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">warmboot_addr</span><span class="p">;</span>
+	<span class="cm">/** Address of sbi_platform */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">platform_addr</span><span class="p">;</span>
+	<span class="cm">/** Address of HART ID to sbi_scratch conversion function */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">hartid_to_scratch</span><span class="p">;</span>
+	<span class="cm">/** Address of trap exit function */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">trap_exit</span><span class="p">;</span>
+	<span class="cm">/** Temporary storage */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">tmp0</span><span class="p">;</span>
+	<span class="cm">/** Options for OpenSBI library */</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">options</span><span class="p">;</span>
+<span class="p">}</span> <span class="n">__packed</span><span class="p">;</span>
+<span class="p">...</span>
+</code></pre></div><h4 id="fw_startfw_sizeフィールド">fw_start、fw_sizeフィールド</h4>
+<p>scratch spaceに<code>_fw_start</code>、およびFWのサイズを格納する。
+<code>mul t0, s7, s8</code>にてすべてのhartのscratch space合計したサイズを計算する(hart count * hart stack size)。
+<code>_fw_end</code>に<code>t0</code>を加えることで、scratch spaceのベースアドレスを計算する。
+そこから、<code>_fw_start</code>(<code>a4</code>レジスタ)を引き去ることで、FWのサイズを計算する(<code>a5</code>レジスタ)。
+<code>a4</code>、<code>a5</code>レジスタをそれぞれ、<code>struct sbi_scratch</code>の<code>fw_start</code>および<code>fw_size</code>フィールドに格納する。</p>
+<h4 id="next_arg1フィールド">next_arg1フィールド</h4>
+<p>次に、next_arg1を格納する。
+レジスタを退避する。(s0, s1, s2) &lt;- (a0, a1, a2)
+<code>fw_next_arg1</code>関数を呼ぶ。(FW_PAYLOAD)
+<code>FW_PAYLOAD_FDT_ADDR</code>が定義されているとき、FDTのPAを次段のクライアントプログラムへ<code>a0</code>レジスタを通して引き渡す。
+定義されていない場合は<code>0</code>を渡す。
+関数から復帰し、<code>next_arg1</code>フィールドへ格納する。
+レジスタを復帰する。(a0, a1, a2) &lt;- (s0, s1, s2)</p>
+<p><code>firmware/fw_payload.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
+	<span class="na">.section</span> <span class="no">.entry</span><span class="p">,</span> <span class="s">&#34;ax&#34;</span><span class="p">,</span> <span class="err">%</span><span class="no">progbits</span>
+	<span class="na">.align</span> <span class="mi">3</span>
+	<span class="na">.global</span> <span class="no">fw_next_arg1</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">We</span> <span class="no">can</span> <span class="no">only</span> <span class="no">use</span> <span class="no">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">and</span> <span class="no">a2</span> <span class="no">registers</span> <span class="no">here.</span>
+	 <span class="err">*</span> <span class="nf">The</span> <span class="no">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">and</span> <span class="no">a2</span> <span class="no">registers</span> <span class="no">will</span> <span class="no">be</span> <span class="no">same</span> <span class="no">as</span> <span class="no">passed</span> <span class="no">by</span>
+	 <span class="err">*</span> <span class="nf">previous</span> <span class="no">booting</span> <span class="no">stage.</span>
+	 <span class="err">*</span> <span class="nf">The</span> <span class="no">next</span> <span class="no">arg1</span> <span class="no">should</span> <span class="no">be</span> <span class="no">returned</span> <span class="no">in</span> <span class="err">&#39;</span><span class="no">a0</span><span class="err">&#39;</span><span class="p">.</span>
+	 <span class="err">*/</span>
+<span class="nl">fw_next_arg1:</span>
+<span class="c">#ifdef FW_PAYLOAD_FDT_ADDR
+</span><span class="c"></span>	<span class="nf">li</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">FW_PAYLOAD_FDT_ADDR</span>
+<span class="c">#else
+</span><span class="c"></span>	<span class="nf">add</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">zero</span>
+<span class="c">#endif
+</span><span class="c"></span>	<span class="nf">ret</span>
+<span class="na">...</span>
+</code></pre></div><h4 id="next_addrフィールド">next_addrフィールド</h4>
+<p>次に、<code>fw_next_addr</code>フィールドを格納する。(FW_PAYLOAD)
+レジスタを退避する。(s0, s1, s2) &lt;- (a0, a1, a2)
+<code>fw_next_addr</code>関数を呼び、PAYLOADの物理アドレスを<code>a0</code>に取得し、復帰する。
+<code>next_addr</code>フィールドに格納し、レジスタを復帰する。(a0, a1, a2) &lt;- (s0, s1, s2)</p>
+<p><code>firmware/fw_payload.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm">	<span class="na">.section</span> <span class="no">.entry</span><span class="p">,</span> <span class="s">&#34;ax&#34;</span><span class="p">,</span> <span class="err">%</span><span class="no">progbits</span>
+	<span class="na">.align</span> <span class="mi">3</span>
+	<span class="na">.global</span> <span class="no">fw_next_addr</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">We</span> <span class="no">can</span> <span class="no">only</span> <span class="no">use</span> <span class="no">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">and</span> <span class="no">a2</span> <span class="no">registers</span> <span class="no">here.</span>
+	 <span class="err">*</span> <span class="nf">The</span> <span class="no">next</span> <span class="no">address</span> <span class="no">should</span> <span class="no">be</span> <span class="no">returned</span> <span class="no">in</span> <span class="err">&#39;</span><span class="no">a0</span><span class="err">&#39;</span><span class="p">.</span>
+	 <span class="err">*/</span>
+<span class="nl">fw_next_addr:</span>
+	<span class="nf">la</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">payload_bin</span>
+	<span class="nf">ret</span>
+</code></pre></div><h4 id="warmboot_addrフィールド">warmboot_addrフィールド</h4>
+<p><code>_start_warm</code>のアドレスを取得し、<code>warmboot_addr</code>フィールドへ格納する。
+<code>_start_warm</code>の実装については次回に取っておこう。(<code>firmware/fw_base.S</code>)</p>
+<h4 id="platform_addrフィールド">platform_addrフィールド</h4>
+<p><code>platform</code>のアドレスを取得し、<code>platform_addr</code>フィールドへ格納する。
+<code>platform</code>は<code>struct sbi_platform</code>の実態である。</p>
+<h4 id="hartid_to_scratchフィールド">hartid_to_scratchフィールド</h4>
+<p><code>_hartid_to_scratch</code>のアドレスを取得し、<code>hartid_to_scratch</code>フィールドへ格納する。
+<code>_hartid_to_scratch</code>は以下の通り、レジスタを使用する。
+<code>a0</code>、<code>a1</code>は呼び出し元が引数として渡すものとする。
+hartidからscratch spaceを求める関数である。
+戻り地は<code>a0</code>レジスタに格納される。</p>
+<table>
+<thead>
+<tr>
+<th>Register</th>
+<th>meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a0</td>
+<td>Hart ID</td>
+</tr>
+<tr>
+<td>a1</td>
+<td>Hart index</td>
+</tr>
+<tr>
+<td>t0</td>
+<td>Hart stack size</td>
+</tr>
+<tr>
+<td>t1</td>
+<td>Hart stack end</td>
+</tr>
+<tr>
+<td>t2</td>
+<td>Temporary</td>
+</tr>
+</tbody>
+</table>
+<p><code>firmware/fw_base.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
+	<span class="na">.section</span> <span class="no">.entry</span><span class="p">,</span> <span class="s">&#34;ax&#34;</span><span class="p">,</span> <span class="err">%</span><span class="no">progbits</span>
+	<span class="na">.align</span> <span class="mi">3</span>
+	<span class="na">.globl</span> <span class="no">_hartid_to_scratch</span>
+<span class="nl">_hartid_to_scratch:</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">a0</span> <span class="p">-</span><span class="err">&gt;</span> <span class="no">HART</span> <span class="no">ID</span> <span class="p">(</span><span class="no">passed</span> <span class="no">by</span> <span class="no">caller</span><span class="p">)</span>
+	 <span class="err">*</span> <span class="nf">a1</span> <span class="p">-</span><span class="err">&gt;</span> <span class="no">HART</span> <span class="no">Index</span> <span class="p">(</span><span class="no">passed</span> <span class="no">by</span> <span class="no">caller</span><span class="p">)</span>
+	 <span class="err">*</span> <span class="nf">t0</span> <span class="p">-</span><span class="err">&gt;</span> <span class="no">HART</span> <span class="no">Stack</span> <span class="no">Size</span>
+	 <span class="err">*</span> <span class="nf">t1</span> <span class="p">-</span><span class="err">&gt;</span> <span class="no">HART</span> <span class="no">Stack</span> <span class="no">End</span>
+	 <span class="err">*</span> <span class="nf">t2</span> <span class="p">-</span><span class="err">&gt;</span> <span class="no">Temporary</span>
+	 <span class="err">*/</span>
+	<span class="nf">la</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">platform</span>
+<span class="c">#if __riscv_xlen == 64
+</span><span class="c"></span>	<span class="nf">lwu</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">SBI_PLATFORM_HART_STACK_SIZE_OFFSET</span><span class="p">(</span><span class="no">t2</span><span class="p">)</span>
+	<span class="nf">lwu</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">SBI_PLATFORM_HART_COUNT_OFFSET</span><span class="p">(</span><span class="no">t2</span><span class="p">)</span>
+<span class="c">#else
+</span><span class="c"></span>	<span class="nf">lw</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">SBI_PLATFORM_HART_STACK_SIZE_OFFSET</span><span class="p">(</span><span class="no">t2</span><span class="p">)</span>
+	<span class="nf">lw</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">SBI_PLATFORM_HART_COUNT_OFFSET</span><span class="p">(</span><span class="no">t2</span><span class="p">)</span>
+<span class="c">#endif
+</span><span class="c"></span>	<span class="nf">sub</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">a1</span>
+	<span class="nf">mul</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">t0</span>
+	<span class="nf">la</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">_fw_end</span>
+	<span class="nf">add</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">t2</span>
+	<span class="nf">li</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">SBI_SCRATCH_SIZE</span>
+	<span class="nf">sub</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">t2</span>
+	<span class="nf">ret</span>
+<span class="na">...</span>
+</code></pre></div><h4 id="trap_exitフィールド">trap_exitフィールド</h4>
+<p><code>_trap_exit</code>のアドレスを取得し、<code>trap_exit</code>フィールドへ格納する。
+<code>_trap_exit</code>は基本的にマクロで実現されている。
+<code>SBI_TRAP_REGS_OFFSET</code>の定義は<code>include/sbi/sbi_trap.h</code>に存在する。
+トラップ時のコンテキストはスタック内に<code>struct sbi_trap_regs</code>として保存される。
+<code>SBI_TRAP_REGS_OFFSET</code>は引数のレジスタ番号に4(<code>__SIZEOF_PTR__</code>)をかけて構造体のオフセットを計算する。
+<code>x0-x31</code>の場合はそれぞれ0~31が対応する。保存する<code>CSR</code>の場合は、それぞれ定数を定義している。
+<code>_trap_exit</code>は引数(<code>struct sbi_trap_regs</code>)を<code>a0</code>に取る。
+これを<code>sp</code>に代入し、<code>sp</code>相対アドレスとして、レジスタコンテキストの復帰を行う。
+<code>_TRAP_RESTORE_GENERAL_REGS_EXCEPT_SP_T0</code>では、<code>sp</code>および<code>t0</code>以外のレジスタコンテキストを復帰する。
+次に、<code>TRAP_RESTORE_MEPC_MSTATUS 0</code>により、<code>mepc</code>および<code>mstatus</code>を復帰する。マクロ引数に0(<code>have_mstatush</code>)を指定しているので、<code>mstatush</code>は復帰しない。
+<code>TRAP_RESTORE_SP_TO</code>にて<code>t0</code>、<code>sp</code>を復帰する。
+注意が必要であるが、<code>sp</code>は最後に復帰しなければならない。(<code>sp</code>相対でアドレスを生成しているため)
+<code>mret</code>により、トラップ時のPCへ復帰する。</p>
+<p><code>firmware/fw_base.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
+<span class="na">.macro</span>	<span class="no">TRAP_RESTORE_GENERAL_REGS_EXCEPT_SP_T0</span>
+	<span class="err">/*</span> <span class="nf">Restore</span> <span class="no">all</span> <span class="no">general</span> <span class="no">regisers</span> <span class="no">except</span> <span class="no">SP</span> <span class="no">and</span> <span class="no">T0</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">REG_L</span>	<span class="no">ra</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">ra</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">gp</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">gp</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">tp</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">tp</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">t1</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">t2</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s0</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s0</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s1</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s1</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">a0</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">a1</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">a1</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">a2</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">a2</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">a3</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">a3</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">a4</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">a4</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">a5</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">a5</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">a6</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">a6</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">a7</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">a7</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s2</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s2</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s3</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s3</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s4</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s4</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s5</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s5</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s6</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s6</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s7</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s7</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s8</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s8</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s9</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s9</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s10</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s10</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">s11</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">s11</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">t3</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">t4</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">t5</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">t5</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span>	<span class="no">t6</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">t6</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+<span class="na">.endm</span>
+
+<span class="na">.macro</span>	<span class="no">TRAP_RESTORE_MEPC_MSTATUS</span> <span class="no">have_mstatush</span>
+	<span class="err">/*</span> <span class="nf">Restore</span> <span class="no">MEPC</span> <span class="no">and</span> <span class="no">MSTATUS</span> <span class="no">CSRs</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">REG_L</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">mepc</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">csrw</span>	<span class="no">CSR_MEPC</span><span class="p">,</span> <span class="no">t0</span>
+	<span class="nf">REG_L</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">mstatus</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">csrw</span>	<span class="no">CSR_MSTATUS</span><span class="p">,</span> <span class="no">t0</span>
+	<span class="na">.if</span> <span class="err">\</span><span class="no">have_mstatush</span>
+	<span class="nf">REG_L</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">mstatusH</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">csrw</span>	<span class="no">CSR_MSTATUSH</span><span class="p">,</span> <span class="no">t0</span>
+	<span class="na">.endif</span>
+<span class="na">.endm</span>
+
+<span class="na">.macro</span> <span class="no">TRAP_RESTORE_SP_T0</span>
+	<span class="err">/*</span> <span class="nf">Restore</span> <span class="no">T0</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">REG_L</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">t0</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+
+	<span class="err">/*</span> <span class="nf">Restore</span> <span class="no">SP</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">REG_L</span>	<span class="no">sp</span><span class="p">,</span> <span class="no">SBI_TRAP_REGS_OFFSET</span><span class="p">(</span><span class="no">sp</span><span class="p">)(</span><span class="no">sp</span><span class="p">)</span>
+<span class="na">.endm</span>
+<span class="na">...</span>
+	<span class="na">.section</span> <span class="no">.entry</span><span class="p">,</span> <span class="s">&#34;ax&#34;</span><span class="p">,</span> <span class="err">%</span><span class="no">progbits</span>
+	<span class="na">.align</span> <span class="mi">3</span>
+	<span class="na">.globl</span> <span class="no">_trap_exit</span>
+<span class="nl">_trap_exit:</span>
+	<span class="nf">add</span>	<span class="no">sp</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">TRAP_RESTORE_GENERAL_REGS_EXCEPT_SP_T0</span>
+	<span class="nf">TRAP_RESTORE_MEPC_MSTATUS</span> <span class="mi">0</span>
+	<span class="nf">TRAP_RESTORE_SP_T0</span>
+	<span class="nf">mret</span>
+<span class="na">...</span>
+</code></pre></div><p><code>include/sbi/sbi_trap.h</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
+<span class="err">/**</span> <span class="nf">Representation</span> <span class="no">of</span> <span class="no">register</span> <span class="no">state</span> <span class="no">at</span> <span class="no">time</span> <span class="no">of</span> <span class="no">trap</span><span class="err">/</span><span class="no">interrupt</span> <span class="p">*</span><span class="err">/</span>
+<span class="c">#define SBI_TRAP_REGS_zero			0
+</span><span class="c">#define SBI_TRAP_REGS_ra			1
+</span><span class="c">#define SBI_TRAP_REGS_sp			2
+</span><span class="c">#define SBI_TRAP_REGS_gp			3
+</span><span class="c">#define SBI_TRAP_REGS_tp			4
+</span><span class="c">#define SBI_TRAP_REGS_t0			5
+</span><span class="c">#define SBI_TRAP_REGS_t1			6
+</span><span class="c">#define SBI_TRAP_REGS_t2			7
+</span><span class="c">#define SBI_TRAP_REGS_s0			8
+</span><span class="c">#define SBI_TRAP_REGS_s1			9
+</span><span class="c">#define SBI_TRAP_REGS_a0			10
+</span><span class="c">#define SBI_TRAP_REGS_a1			11
+</span><span class="c">#define SBI_TRAP_REGS_a2			12
+</span><span class="c">#define SBI_TRAP_REGS_a3			13
+</span><span class="c">#define SBI_TRAP_REGS_a4			14
+</span><span class="c">#define SBI_TRAP_REGS_a5			15
+</span><span class="c">#define SBI_TRAP_REGS_a6			16
+</span><span class="c">#define SBI_TRAP_REGS_a7			17
+</span><span class="c">#define SBI_TRAP_REGS_s2			18
+</span><span class="c">#define SBI_TRAP_REGS_s3			19
+</span><span class="c">#define SBI_TRAP_REGS_s4			20
+</span><span class="c">#define SBI_TRAP_REGS_s5			21
+</span><span class="c">#define SBI_TRAP_REGS_s6			22
+</span><span class="c">#define SBI_TRAP_REGS_s7			23
+</span><span class="c">#define SBI_TRAP_REGS_s8			24
+</span><span class="c">#define SBI_TRAP_REGS_s9			25
+</span><span class="c">#define SBI_TRAP_REGS_s10			26
+</span><span class="c">#define SBI_TRAP_REGS_s11			27
+</span><span class="c">#define SBI_TRAP_REGS_t3			28
+</span><span class="c">#define SBI_TRAP_REGS_t4			29
+</span><span class="c">#define SBI_TRAP_REGS_t5			30
+</span><span class="c">#define SBI_TRAP_REGS_t6			31
+</span><span class="c">#define SBI_TRAP_REGS_mepc			32
+</span><span class="c">#define SBI_TRAP_REGS_mstatus			33
+</span><span class="c">#define SBI_TRAP_REGS_mstatusH			34
+</span><span class="c">#define SBI_TRAP_REGS_last			35
+</span><span class="c"></span><span class="na">...</span>
+<span class="c">#define SBI_TRAP_REGS_OFFSET(x) ((SBI_TRAP_REGS_##x) * __SIZEOF_POINTER__)
+</span><span class="c">#define SBI_TRAP_REGS_SIZE SBI_TRAP_REGS_OFFSET(last)
+</span><span class="c"></span><span class="na">...</span>
+
+<span class="nf">struct</span> <span class="no">sbi_trap_regs</span> <span class="err">{</span>
+	<span class="err">/**</span> <span class="nf">zero</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">zero</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">ra</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">ra</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">sp</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">sp</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">gp</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">gp</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">tp</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">tp</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">t0</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">t0</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">t1</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">t1</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">t2</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">t2</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s0</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s0</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s1</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s1</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">a0</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">a0</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">a1</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">a1</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">a2</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">a2</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">a3</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">a3</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">a4</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">a4</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">a5</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">a5</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">a6</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">a6</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">a7</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">a7</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s2</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s2</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s3</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s3</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s4</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s4</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s5</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s5</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s6</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s6</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s7</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s7</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s8</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s8</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s9</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s9</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s10</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s10</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">s11</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">s11</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">t3</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">t3</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">t4</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">t4</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">t5</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">t5</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">t6</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">t6</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">mepc</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">mepc</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">mstatus</span> <span class="no">register</span> <span class="no">state</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">mstatus</span><span class="c">;
+</span><span class="c"></span>	<span class="err">/</span><span class="p">**</span> <span class="no">mstatusH</span> <span class="no">register</span> <span class="no">state</span> <span class="p">(</span><span class="no">only</span> <span class="no">for</span> <span class="mi">32</span><span class="p">-</span><span class="no">bit</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">mstatusH</span><span class="c">;
+</span><span class="c"></span><span class="err">}</span> <span class="no">__packed</span><span class="c">;
+</span><span class="c"></span><span class="no">...</span>
+</code></pre></div><h4 id="scratch_tmp0フィールド">scratch_tmp0フィールド</h4>
+<p><code>NULL</code>をアドレスとして<code>scratch_tmp0</code>フィールドに格納する。</p>
+<h4 id="fw_options">fw_options</h4>
+<p>レジスタを退避。(s0, s1, s2) &lt;- (a0, a1, a2)
+<code>FW_OPTIONS</code>フラグが定義されているとき、それで<code>a0</code>レジスタ上書きする。
+それ以外は<code>fw_options</code>を呼び出す。(FW_PAYLOAD)
+<code>a0</code>レジスタを<code>options</code>フィールドへ格納する。</p>
+<p><code>firmware/fw_payload.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
+	<span class="na">.section</span> <span class="no">.entry</span><span class="p">,</span> <span class="s">&#34;ax&#34;</span><span class="p">,</span> <span class="err">%</span><span class="no">progbits</span>
+	<span class="na">.align</span> <span class="mi">3</span>
+	<span class="na">.global</span> <span class="no">fw_options</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">We</span> <span class="no">can</span> <span class="no">only</span> <span class="no">use</span> <span class="no">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">and</span> <span class="no">a2</span> <span class="no">registers</span> <span class="no">here.</span>
+	 <span class="err">*</span> <span class="nf">The</span> <span class="err">&#39;</span><span class="no">a4</span><span class="err">&#39;</span> <span class="no">register</span> <span class="no">will</span> <span class="no">have</span> <span class="no">default</span> <span class="no">options.</span>
+	 <span class="err">*</span> <span class="nf">The</span> <span class="no">next</span> <span class="no">address</span> <span class="no">should</span> <span class="no">be</span> <span class="no">returned</span> <span class="no">in</span> <span class="err">&#39;</span><span class="no">a0</span><span class="err">&#39;</span><span class="p">.</span>
+	 <span class="err">*/</span>
+<span class="nl">fw_options:</span>
+	<span class="nf">add</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">zero</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">ret</span>
+<span class="na">...</span>
+</code></pre></div><h4 id="hart-count回繰り返す">hart count回繰り返す。</h4>
+<p>現在処理中のhartid(<code>t1</code>)を+1(+<code>t2</code>)する。
+hart count(<code>s7</code>)以上になるまで、<code>_scratch_init</code>を繰り返す。</p>
+<p>最終的な、scratch spaceは以下の画像のようになる。
+<span class="image-container"><span class="link" ><a href="./image01.png" 
+        target="_blank"><img class="img" src="./image01.png"/></a></span>
+</span></p>
+<p>次回は、FDTのリロケーションおよび<code>_start_warm</code>の実装について調べる。</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
+</div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part5/"><span class="iconfont icon-article"></span>Reading OpenSBI part5</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part3/"><span class="iconfont icon-article"></span>Reading OpenSBI part3</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">©2021 koyamanX</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section></body>
+
+</html>
