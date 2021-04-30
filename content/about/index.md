@@ -8,6 +8,10 @@ draft: false
 ## このサイトについて
 自分のやったことや調べたことなど経験をまとめる。
 
+## SNS
+- [Twitter](https://twitter.com/koyamanX/)
+- [github](https://github.com/koyamanX/)
+
 ## プロジェクト
 - RISC-V
 	- [Linux-capable in order 5 stage pipelined RISC-V Processor(single core)](https://github.com/koyamanX/rv32x_dev)
