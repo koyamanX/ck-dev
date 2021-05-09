@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>Reading linux kernel part6&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Reading linux kernel part6" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">Reading linux kernel part6</h1><p class="article date">Friday, April 2, 2021</p></section><article class="article markdown-body"><p><code>handle_exception</code>の続きを読んでいく。</p>
+<h2 id="handle_exception">handle_exception</h2>
+<p>global pointerのロードから。</p>
+<p><code>arch/riscv/kernel/entry.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm">	<span class="err">/*</span> <span class="nf">Load</span> <span class="no">the</span> <span class="no">global</span> <span class="no">pointer</span> <span class="p">*</span><span class="err">/</span>
+<span class="na">.option</span> <span class="no">push</span>
+<span class="na">.option</span> <span class="no">norelax</span>
+	<span class="nf">la</span> <span class="no">gp</span><span class="p">,</span> <span class="no">__global_pointer$</span>
+<span class="na">.option</span> <span class="no">pop</span>
+
+<span class="c">#ifdef CONFIG_TRACE_IRQFLAGS
+</span><span class="c"></span>	<span class="nf">call</span> <span class="no">trace_hardirqs_off</span>
+<span class="c">#endif
+</span><span class="c"></span>
+<span class="c">#ifdef CONFIG_CONTEXT_TRACKING
+</span><span class="c"></span>	<span class="err">/*</span> <span class="nf">If</span> <span class="no">previous</span> <span class="no">state</span> <span class="no">is</span> <span class="no">in</span> <span class="no">user</span> <span class="no">mode</span><span class="p">,</span> <span class="no">call</span> <span class="no">context_tracking_user_exit.</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">li</span>   <span class="no">a0</span><span class="p">,</span> <span class="no">SR_PP</span>
+	<span class="nf">and</span> <span class="no">a0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a0</span>
+	<span class="nf">bnez</span> <span class="no">a0</span><span class="p">,</span> <span class="no">skip_context_tracking</span>
+	<span class="nf">call</span> <span class="no">context_tracking_user_exit</span>
+<span class="nl">skip_context_tracking:</span>
+<span class="c">#endif
+</span><span class="c"></span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">MSB</span> <span class="no">of</span> <span class="no">cause</span> <span class="no">differentiates</span> <span class="no">between</span>
+	 <span class="err">*</span> <span class="nf">interrupts</span> <span class="no">and</span> <span class="no">exceptions</span>
+	 <span class="err">*/</span>
+	<span class="nf">bge</span> <span class="no">s4</span><span class="p">,</span> <span class="no">zero</span><span class="p">,</span> <span class="mi">1</span><span class="no">f</span>
+
+	<span class="nf">la</span> <span class="no">ra</span><span class="p">,</span> <span class="no">ret_from_exception</span>
+
+	<span class="err">/*</span> <span class="nf">Handle</span> <span class="no">interrupts</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">move</span> <span class="no">a0</span><span class="p">,</span> <span class="no">sp</span> <span class="err">/</span><span class="p">*</span> <span class="no">pt_regs</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span> <span class="no">a1</span><span class="p">,</span> <span class="no">handle_arch_irq</span>
+	<span class="nf">REG_L</span> <span class="no">a1</span><span class="p">,</span> <span class="p">(</span><span class="no">a1</span><span class="p">)</span>
+	<span class="nf">jr</span> <span class="no">a1</span>
+<span class="err">1:</span>
+<span class="c">#ifdef CONFIG_TRACE_IRQFLAGS
+</span><span class="c"></span>	<span class="nf">call</span> <span class="no">trace_hardirqs_on</span>
+<span class="c">#endif
+</span><span class="c"></span>	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">Exceptions</span> <span class="no">run</span> <span class="no">with</span> <span class="no">interrupts</span> <span class="no">enabled</span> <span class="no">or</span> <span class="no">disabled</span> <span class="no">depending</span> <span class="no">on</span> <span class="no">the</span>
+	 <span class="err">*</span> <span class="nf">state</span> <span class="no">of</span> <span class="no">SR_PIE</span> <span class="no">in</span> <span class="no">m</span><span class="err">/</span><span class="no">sstatus.</span>
+	 <span class="err">*/</span>
+	<span class="nf">andi</span> <span class="no">t0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">SR_PIE</span>
+	<span class="nf">beqz</span> <span class="no">t0</span><span class="p">,</span> <span class="mi">1</span><span class="no">f</span>
+	<span class="nf">csrs</span> <span class="no">CSR_STATUS</span><span class="p">,</span> <span class="no">SR_IE</span>
+</code></pre></div><p><code>gp</code>をロードする。global pointerはリロケーション済みになる。
+トラッキングについては省く。
+次に、<code>s4</code>レジスタ(<code>scause</code>)の最上位ビットを調べる。
+最上位ビットが立っているときは割込みである。
+<code>bge s4, zero, 1f</code>で確かめている。
+例外の場合は、<code>1:</code>である。</p>
+<p>まずは、例外の処理を見ていく。</p>
+<h3 id="例外の処理">例外の処理</h3>
+<p>sstatus(<code>s1</code>)にpie(Previous Interrupt Enable)が立っているか調べる。
+例外発生時に割込みが有効であったか調べる。
+もし、<code>sstatus.pie</code>が0であれば、<code>sstatus.sie</code>をセットする。</p>
+<p>次にリターンアドレスをセットする。(<code>ret_from_exception</code>)
+<code>s4</code>(<code>scause</code>)が<code>EXC_SYSCALL</code>であるか調べる。
+その場合は、システムコールなので<code>handle_syscall</code>へ分岐する。
+その他の例外の場合は、<code>excp_vect_table</code>を索引する。
+<code>s4</code>(<code>scause</code>)を右に二回(RV32の場合は、<code>RISCV_LGPTR</code>は<code>2</code>、<code>arch/riscv/include/asm/asm.h</code>)左にシフトする。
+<code>a0</code>に<code>pt_regs</code>のポインタをセットし、<code>excp_vect_table</code>〜<code>excp_vect_table_end</code>の間にあるかをみて、索引する。
+その後、レジスタ相対ジャンプを行う。</p>
+<p><code>excp_vect_table</code>〜<code>excp_vect_table_end</code>の間にインデックス(<code>t0</code>)が収まらない場合は、<code>1:</code>へ分岐し、<code>do_trap_unknown</code>を実行する。</p>
+<h4 id="excp_vect_table">excp_vect_table</h4>
+<p>システムコール以外の、各例外のハンドラは<code>excp_vect_table</code>に登録されている。
+索引する際に、範囲外であれば、<code>do_trap_unknown</code>となる。
+<code>arch/riscv/kernel/entry.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="c">#ifndef CONFIG_MMU
+</span><span class="c">#define do_page_fault do_trap_unknown
+</span><span class="c">#endif
+</span><span class="c"></span>
+	<span class="na">.section</span> <span class="s">&#34;.rodata&#34;</span>
+	<span class="err">/*</span> <span class="nf">Exception</span> <span class="no">vector</span> <span class="no">table</span> <span class="p">*</span><span class="err">/</span>
+<span class="nf">ENTRY</span><span class="p">(</span><span class="no">excp_vect_table</span><span class="p">)</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_insn_misaligned</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_insn_fault</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_insn_illegal</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_break</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_load_misaligned</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_load_fault</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_store_misaligned</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_store_fault</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_ecall_u</span> <span class="err">/</span><span class="p">*</span> <span class="no">system</span> <span class="no">call</span><span class="p">,</span> <span class="no">gets</span> <span class="no">intercepted</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_ecall_s</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_unknown</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_ecall_m</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_page_fault</span>   <span class="err">/</span><span class="p">*</span> <span class="no">instruction</span> <span class="no">page</span> <span class="no">fault</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_page_fault</span>   <span class="err">/</span><span class="p">*</span> <span class="no">load</span> <span class="no">page</span> <span class="no">fault</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_trap_unknown</span>
+	<span class="nf">RISCV_PTR</span> <span class="no">do_page_fault</span>   <span class="err">/</span><span class="p">*</span> <span class="no">store</span> <span class="no">page</span> <span class="no">fault</span> <span class="p">*</span><span class="err">/</span>
+<span class="nl">excp_vect_table_end:</span>
+<span class="nf">END</span><span class="p">(</span><span class="no">excp_vect_table</span><span class="p">)</span>
+</code></pre></div><h4 id="handle_syscall">handle_syscall</h4>
+<p><code>arch/riscv/kernel/entry.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="nl">handle_syscall:</span>
+<span class="c">#if defined(CONFIG_TRACE_IRQFLAGS) || defined(CONFIG_CONTEXT_TRACKING)
+</span><span class="c"></span>	<span class="err">/*</span> <span class="nf">Recover</span> <span class="no">a0</span> <span class="p">-</span> <span class="no">a7</span> <span class="no">for</span> <span class="no">system</span> <span class="no">calls</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">REG_L</span> <span class="no">a0</span><span class="p">,</span> <span class="no">PT_A0</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a1</span><span class="p">,</span> <span class="no">PT_A1</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a2</span><span class="p">,</span> <span class="no">PT_A2</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a3</span><span class="p">,</span> <span class="no">PT_A3</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a4</span><span class="p">,</span> <span class="no">PT_A4</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a5</span><span class="p">,</span> <span class="no">PT_A5</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a6</span><span class="p">,</span> <span class="no">PT_A6</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a7</span><span class="p">,</span> <span class="no">PT_A7</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+<span class="c">#endif
+</span><span class="c"></span>	 <span class="err">/*</span> <span class="nf">save</span> <span class="no">the</span> <span class="no">initial</span> <span class="no">A0</span> <span class="no">value</span> <span class="p">(</span><span class="no">needed</span> <span class="no">in</span> <span class="no">signal</span> <span class="no">handlers</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">REG_S</span> <span class="no">a0</span><span class="p">,</span> <span class="no">PT_ORIG_A0</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">Advance</span> <span class="no">SEPC</span> <span class="no">to</span> <span class="no">avoid</span> <span class="no">executing</span> <span class="no">the</span> <span class="no">original</span>
+	 <span class="err">*</span> <span class="nf">scall</span> <span class="no">instruction</span> <span class="no">on</span> <span class="no">sret</span>
+	 <span class="err">*/</span>
+	<span class="nf">addi</span> <span class="no">s2</span><span class="p">,</span> <span class="no">s2</span><span class="p">,</span> <span class="mi">0x4</span>
+	<span class="nf">REG_S</span> <span class="no">s2</span><span class="p">,</span> <span class="no">PT_EPC</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="err">/*</span> <span class="nf">Trace</span> <span class="no">syscalls</span><span class="p">,</span> <span class="no">but</span> <span class="no">only</span> <span class="no">if</span> <span class="no">requested</span> <span class="no">by</span> <span class="no">the</span> <span class="no">user.</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">REG_L</span> <span class="no">t0</span><span class="p">,</span> <span class="no">TASK_TI_FLAGS</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="nf">andi</span> <span class="no">t0</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">_TIF_SYSCALL_WORK</span>
+	<span class="nf">bnez</span> <span class="no">t0</span><span class="p">,</span> <span class="no">handle_syscall_trace_enter</span>
+</code></pre></div><p><code>a0</code>レジスタを<code>pt_regs-&gt;orig_a0</code>に保存する。
+<code>sepc</code>(<code>s2</code>)を+4して、<code>pt_regs-&gt;epc</code>に保存する。</p>
+<p>次に、<code>thread_info-&gt;flags</code>を取り出し、システムコールをトレースが必要か調べる。</p>
+<p><code>arch/riscv/include/asm/thread_info.h</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="err">/*</span>
+ <span class="err">*</span> <span class="nf">thread</span> <span class="no">information</span> <span class="no">flags</span>
+ <span class="err">*</span> <span class="err">-</span> <span class="nf">these</span> <span class="no">are</span> <span class="no">process</span> <span class="no">state</span> <span class="no">flags</span> <span class="no">that</span> <span class="no">various</span> <span class="no">assembly</span> <span class="no">files</span> <span class="no">may</span> <span class="no">need</span> <span class="no">to</span>
+ <span class="err">*</span>   <span class="nf">access</span>
+ <span class="err">*</span> <span class="err">-</span> <span class="nf">pending</span> <span class="no">work-to-be-done</span> <span class="no">flags</span> <span class="no">are</span> <span class="no">in</span> <span class="no">lowest</span> <span class="no">half-word</span>
+ <span class="err">*</span> <span class="err">-</span> <span class="nf">other</span> <span class="no">flags</span> <span class="no">in</span> <span class="no">upper</span> <span class="no">half-word</span><span class="p">(</span><span class="no">s</span><span class="p">)</span>
+ <span class="err">*/</span>
+<span class="c">#define TIF_SYSCALL_TRACE	0	/* syscall trace active */
+</span><span class="c">#define TIF_NOTIFY_RESUME	1	/* callback before returning to user */
+</span><span class="c">#define TIF_SIGPENDING		2	/* signal pending */
+</span><span class="c">#define TIF_NEED_RESCHED	3	/* rescheduling necessary */
+</span><span class="c">#define TIF_RESTORE_SIGMASK	4	/* restore signal mask in do_signal() */
+</span><span class="c">#define TIF_MEMDIE		5	/* is terminating due to OOM killer */
+</span><span class="c">#define TIF_SYSCALL_TRACEPOINT  6       /* syscall tracepoint instrumentation */
+</span><span class="c">#define TIF_SYSCALL_AUDIT	7	/* syscall auditing */
+</span><span class="c">#define TIF_SECCOMP		8	/* syscall secure computing */
+</span><span class="c"></span>
+<span class="c">#define _TIF_SYSCALL_TRACE	(1 &lt;&lt; TIF_SYSCALL_TRACE)
+</span><span class="c">#define _TIF_NOTIFY_RESUME	(1 &lt;&lt; TIF_NOTIFY_RESUME)
+</span><span class="c">#define _TIF_SIGPENDING		(1 &lt;&lt; TIF_SIGPENDING)
+</span><span class="c">#define _TIF_NEED_RESCHED	(1 &lt;&lt; TIF_NEED_RESCHED)
+</span><span class="c">#define _TIF_SYSCALL_TRACEPOINT	(1 &lt;&lt; TIF_SYSCALL_TRACEPOINT)
+</span><span class="c">#define _TIF_SYSCALL_AUDIT	(1 &lt;&lt; TIF_SYSCALL_AUDIT)
+</span><span class="c">#define _TIF_SECCOMP		(1 &lt;&lt; TIF_SECCOMP)
+</span><span class="c"></span>
+<span class="c">#define _TIF_SYSCALL_WORK \
+</span><span class="c"></span>	<span class="err">(</span><span class="nf">_TIF_SYSCALL_TRACE</span> <span class="err">|</span> <span class="no">_TIF_SYSCALL_TRACEPOINT</span> <span class="err">|</span> <span class="no">_TIF_SYSCALL_AUDIT</span> <span class="err">|</span> <span class="err">\</span>
+	 <span class="nf">_TIF_SECCOMP</span><span class="p">)</span>
+
+</code></pre></div><p>トレースが必要な場合は<code>handle_syscall_trace_enter</code>に分岐する。
+このパスは<code>ptrace</code>に用いられる。</p>
+<p><code>arch/riscv/kernel/entry.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="err">/*</span> <span class="nf">Slow</span> <span class="no">paths</span> <span class="no">for</span> <span class="no">ptrace.</span> <span class="p">*</span><span class="err">/</span>
+<span class="nl">handle_syscall_trace_enter:</span>
+	<span class="nf">move</span> <span class="no">a0</span><span class="p">,</span> <span class="no">sp</span>
+	<span class="nf">call</span> <span class="no">do_syscall_trace_enter</span>
+	<span class="nf">move</span> <span class="no">t0</span><span class="p">,</span> <span class="no">a0</span>
+	<span class="nf">REG_L</span> <span class="no">a0</span><span class="p">,</span> <span class="no">PT_A0</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a1</span><span class="p">,</span> <span class="no">PT_A1</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a2</span><span class="p">,</span> <span class="no">PT_A2</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a3</span><span class="p">,</span> <span class="no">PT_A3</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a4</span><span class="p">,</span> <span class="no">PT_A4</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a5</span><span class="p">,</span> <span class="no">PT_A5</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a6</span><span class="p">,</span> <span class="no">PT_A6</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">a7</span><span class="p">,</span> <span class="no">PT_A7</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">bnez</span> <span class="no">t0</span><span class="p">,</span> <span class="no">ret_from_syscall_rejected</span>
+	<span class="nf">j</span> <span class="no">check_syscall_nr</span>
+<span class="nl">handle_syscall_trace_exit:</span>
+	<span class="nf">move</span> <span class="no">a0</span><span class="p">,</span> <span class="no">sp</span>
+	<span class="nf">call</span> <span class="no">do_syscall_trace_exit</span>
+	<span class="nf">j</span> <span class="no">ret_from_exception</span>
+</code></pre></div><p>この場合でも<code>check_syscall_nr</code>を呼びだす。
+よって、このパスはとりあえず無視する。</p>
+<p><code>arch/riscv/kernel/entry.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="nl">check_syscall_nr:</span>
+	<span class="err">/*</span> <span class="nf">Check</span> <span class="no">to</span> <span class="no">make</span> <span class="no">sure</span> <span class="no">we</span> <span class="no">don</span><span class="err">&#39;</span><span class="no">t</span> <span class="no">jump</span> <span class="no">to</span> <span class="no">a</span> <span class="no">bogus</span> <span class="no">syscall</span> <span class="no">number.</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">li</span> <span class="no">t0</span><span class="p">,</span> <span class="no">__NR_syscalls</span>
+	<span class="nf">la</span> <span class="no">s0</span><span class="p">,</span> <span class="no">sys_ni_syscall</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">Syscall</span> <span class="no">number</span> <span class="no">held</span> <span class="no">in</span> <span class="no">a7.</span>
+	 <span class="err">*</span> <span class="nf">If</span> <span class="no">syscall</span> <span class="no">number</span> <span class="no">is</span> <span class="no">above</span> <span class="no">allowed</span> <span class="no">value</span><span class="p">,</span> <span class="no">redirect</span> <span class="no">to</span> <span class="no">ni_syscall.</span>
+	 <span class="err">*/</span>
+	<span class="nf">bge</span> <span class="no">a7</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="mi">1</span><span class="no">f</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">Check</span> <span class="no">if</span> <span class="no">syscall</span> <span class="no">is</span> <span class="no">rejected</span> <span class="no">by</span> <span class="no">tracer</span><span class="p">,</span> <span class="no">i.e.</span><span class="p">,</span> <span class="no">a7</span> <span class="err">==</span> <span class="p">-</span><span class="mi">1</span><span class="p">.</span>
+	 <span class="err">*</span> <span class="nf">If</span> <span class="no">yes</span><span class="p">,</span> <span class="no">we</span> <span class="no">pretend</span> <span class="no">it</span> <span class="no">was</span> <span class="no">executed.</span>
+	 <span class="err">*/</span>
+	<span class="nf">li</span> <span class="no">t1</span><span class="p">,</span> <span class="p">-</span><span class="mi">1</span>
+	<span class="nf">beq</span> <span class="no">a7</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">ret_from_syscall_rejected</span>
+	<span class="nf">blt</span> <span class="no">a7</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="mi">1</span><span class="no">f</span>
+	<span class="err">/*</span> <span class="nf">Call</span> <span class="no">syscall</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">la</span> <span class="no">s0</span><span class="p">,</span> <span class="no">sys_call_table</span>
+	<span class="nf">slli</span> <span class="no">t0</span><span class="p">,</span> <span class="no">a7</span><span class="p">,</span> <span class="no">RISCV_LGPTR</span>
+	<span class="nf">add</span> <span class="no">s0</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">t0</span>
+	<span class="nf">REG_L</span> <span class="no">s0</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">s0</span><span class="p">)</span>
+<span class="err">1:</span>
+	<span class="nf">jalr</span> <span class="no">s0</span>
+</code></pre></div><p><code>__NR_syscalls</code>はシステムコール番号の最大値である。</p>
+<p><code>arch/riscv/kernel/syscall_table.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="cp">#undef __SYSCALL
+</span><span class="cp">#define __SYSCALL(nr, call)	[nr] = (call),
+</span><span class="cp"></span>
+<span class="kt">void</span> <span class="o">*</span><span class="n">sys_call_table</span><span class="p">[</span><span class="n">__NR_syscalls</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+	<span class="p">[</span><span class="mi">0</span> <span class="p">...</span> <span class="n">__NR_syscalls</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">sys_ni_syscall</span><span class="p">,</span>
+<span class="cp">#include</span> <span class="cpf">&lt;asm/unistd.h&gt;</span><span class="cp">
+</span><span class="cp"></span><span class="p">};</span>
+</code></pre></div><p><code>sys_ni_syscall</code>は実装されていないシステムコールの処理である。
+<code>kernel/sys_ni.c</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="cm">/*  we can&#39;t #include &lt;linux/syscalls.h&gt; here,
+</span><span class="cm">    but tell gcc to not warn with -Wmissing-prototypes  */</span>
+<span class="n">asmlinkage</span> <span class="kt">long</span> <span class="nf">sys_ni_syscall</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+
+<span class="cm">/*
+</span><span class="cm"> * Non-implemented system calls get redirected here.
+</span><span class="cm"> */</span>
+<span class="n">asmlinkage</span> <span class="kt">long</span> <span class="nf">sys_ni_syscall</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">return</span> <span class="o">-</span><span class="n">ENOSYS</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div><p>システムコール発行の引数(<code>a7</code>)のシステムコール番号が<code>__NR_syscalls</code>より以上の場合は実装されていない。(<code>1:</code>)</p>
+<p>システムコール番号(<code>a7</code>)が<code>-1</code>の場合は<code>ret_from_syscall_rejected</code>へ分岐する。</p>
+<p>次にシステムコール番号(<code>a7</code>)で<code>sys_call_table</code>を索引し、ジャンプする。</p>
+<h4 id="例外からの復帰">例外からの復帰</h4>
+<p><code>arch/riscv/kernel/entry.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="nl">ret_from_syscall</span><span class="p">:</span>
+	<span class="cm">/* Set user a0 to kernel a0 */</span>
+	<span class="n">REG_S</span> <span class="n">a0</span><span class="p">,</span> <span class="n">PT_A0</span><span class="p">(</span><span class="n">sp</span><span class="p">)</span>
+	<span class="cm">/*
+</span><span class="cm">	 * We didn&#39;t execute the actual syscall.
+</span><span class="cm">	 * Seccomp already set return value for the current task pt_regs.
+</span><span class="cm">	 * (If it was configured with SECCOMP_RET_ERRNO/TRACE)
+</span><span class="cm">	 */</span>
+<span class="nl">ret_from_syscall_rejected</span><span class="p">:</span>
+	<span class="cm">/* Trace syscalls, but only if requested by the user. */</span>
+	<span class="n">REG_L</span> <span class="n">t0</span><span class="p">,</span> <span class="n">TASK_TI_FLAGS</span><span class="p">(</span><span class="n">tp</span><span class="p">)</span>
+	<span class="n">andi</span> <span class="n">t0</span><span class="p">,</span> <span class="n">t0</span><span class="p">,</span> <span class="n">_TIF_SYSCALL_WORK</span>
+	<span class="n">bnez</span> <span class="n">t0</span><span class="p">,</span> <span class="n">handle_syscall_trace_exit</span>
+
+<span class="nl">ret_from_exception</span><span class="p">:</span>
+	<span class="n">REG_L</span> <span class="n">s0</span><span class="p">,</span> <span class="n">PT_STATUS</span><span class="p">(</span><span class="n">sp</span><span class="p">)</span>
+	<span class="n">csrc</span> <span class="n">CSR_STATUS</span><span class="p">,</span> <span class="n">SR_IE</span>
+<span class="cp">#ifdef CONFIG_TRACE_IRQFLAGS
+</span><span class="cp"></span>	<span class="n">call</span> <span class="n">trace_hardirqs_off</span>
+<span class="cp">#endif
+</span><span class="cp">#ifdef CONFIG_RISCV_M_MODE
+</span><span class="cp"></span>	<span class="cm">/* the MPP value is too large to be used as an immediate arg for addi */</span>
+	<span class="n">li</span> <span class="n">t0</span><span class="p">,</span> <span class="n">SR_MPP</span>
+	<span class="n">and</span> <span class="n">s0</span><span class="p">,</span> <span class="n">s0</span><span class="p">,</span> <span class="n">t0</span>
+<span class="cp">#else
+</span><span class="cp"></span>	<span class="n">andi</span> <span class="n">s0</span><span class="p">,</span> <span class="n">s0</span><span class="p">,</span> <span class="n">SR_SPP</span>
+<span class="cp">#endif
+</span><span class="cp"></span>	<span class="n">bnez</span> <span class="n">s0</span><span class="p">,</span> <span class="n">resume_kernel</span>
+</code></pre></div><p>次に、システムコールの戻り値を<code>pt_regs-&gt;a0</code>に保存し、割込みを無効にする。
+次に移るモード(<code>sstatus.spp</code>)をマスクする。
+このモードが<code>0</code>の場合はユーザーモードなので、<code>resume_userspace</code>を実行する。
+それ以外は<code>resume_kernel</code>を実行する。</p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="c">#if IS_ENABLED(CONFIG_PREEMPTION)
+</span><span class="c"></span><span class="nl">resume_kernel:</span>
+	<span class="nf">REG_L</span> <span class="no">s0</span><span class="p">,</span> <span class="no">TASK_TI_PREEMPT_COUNT</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="nf">bnez</span> <span class="no">s0</span><span class="p">,</span> <span class="no">restore_all</span>
+	<span class="nf">REG_L</span> <span class="no">s0</span><span class="p">,</span> <span class="no">TASK_TI_FLAGS</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+	<span class="nf">andi</span> <span class="no">s0</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">_TIF_NEED_RESCHED</span>
+	<span class="nf">beqz</span> <span class="no">s0</span><span class="p">,</span> <span class="no">restore_all</span>
+	<span class="nf">call</span> <span class="no">preempt_schedule_irq</span>
+	<span class="nf">j</span> <span class="no">restore_all</span>
+<span class="c">#endif
+</span></code></pre></div><p><code>CONFIG_PREEMPTION</code>を定義すると、プロセスコンテキストにおいてカーネル内のコードを実行中であっても他のプロセスにCPUを手放す。</p>
+<ul>
+<li><a href="https://wiki.bit-hive.com/linuxkernelmemo/pg/%E3%83%97%E3%83%AA%E3%82%A8%E3%83%B3%E3%83%97%E3%82%B7%E3%83%A7%E3%83%B3"target="_blank" rel="noopener noreferrer">プリエンプション</a>
+</li>
+</ul>
+<p>今回は、<code>CONFIG_PREEMPTION</code>を定義していないので、<code>resume_kernel</code>の実体は<code>restore_all</code>となる。</p>
+<p><code>arch/riscv/kernel/entry.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="c">#if !IS_ENABLED(CONFIG_PREEMPTION)
+</span><span class="c"></span><span class="na">.set</span> <span class="no">resume_kernel</span><span class="p">,</span> <span class="no">restore_all</span>
+<span class="c">#endif
+</span></code></pre></div><p><code>arch/riscv/kernel/entry.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="nl">restore_all:</span>
+<span class="c">#ifdef CONFIG_TRACE_IRQFLAGS
+</span><span class="c"></span>	<span class="nf">REG_L</span> <span class="no">s1</span><span class="p">,</span> <span class="no">PT_STATUS</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">andi</span> <span class="no">t0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">SR_PIE</span>
+	<span class="nf">beqz</span> <span class="no">t0</span><span class="p">,</span> <span class="mi">1</span><span class="no">f</span>
+	<span class="nf">call</span> <span class="no">trace_hardirqs_on</span>
+	<span class="nf">j</span> <span class="mi">2</span><span class="no">f</span>
+<span class="err">1:</span>
+	<span class="nf">call</span> <span class="no">trace_hardirqs_off</span>
+<span class="err">2:</span>
+<span class="c">#endif
+</span></code></pre></div><p><code>CONFIG_TRACE_IRQFLAGS</code>は定義していないので、スキップする。</p>
+<p><code>arch/riscv/kernel/entry.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm">	<span class="nf">REG_L</span> <span class="no">a0</span><span class="p">,</span> <span class="no">PT_STATUS</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">The</span> <span class="no">current</span> <span class="no">load</span> <span class="no">reservation</span> <span class="no">is</span> <span class="no">effectively</span> <span class="no">part</span> <span class="no">of</span> <span class="no">the</span> <span class="no">processor</span><span class="err">&#39;</span><span class="no">s</span>
+	 <span class="err">*</span> <span class="nf">state</span><span class="p">,</span> <span class="no">in</span> <span class="no">the</span> <span class="no">sense</span> <span class="no">that</span> <span class="no">load</span> <span class="no">reservations</span> <span class="no">cannot</span> <span class="no">be</span> <span class="no">shared</span> <span class="no">between</span>
+	 <span class="err">*</span> <span class="nf">different</span> <span class="no">hart</span> <span class="no">contexts.</span>  <span class="no">We</span> <span class="no">can</span><span class="err">&#39;</span><span class="no">t</span> <span class="no">actually</span> <span class="no">save</span> <span class="no">and</span> <span class="no">restore</span> <span class="no">a</span> <span class="no">load</span>
+	 <span class="err">*</span> <span class="nf">reservation</span><span class="p">,</span> <span class="no">so</span> <span class="no">instead</span> <span class="no">here</span> <span class="no">we</span> <span class="no">clear</span> <span class="no">any</span> <span class="no">existing</span> <span class="no">reservation</span> <span class="p">--</span>
+	 <span class="err">*</span> <span class="nf">it</span><span class="err">&#39;</span><span class="no">s</span> <span class="no">always</span> <span class="no">legal</span> <span class="no">for</span> <span class="no">implementations</span> <span class="no">to</span> <span class="no">clear</span> <span class="no">load</span> <span class="no">reservations</span> <span class="no">at</span>
+	 <span class="err">*</span> <span class="nf">any</span> <span class="no">point</span> <span class="p">(</span><span class="no">as</span> <span class="no">long</span> <span class="no">as</span> <span class="no">the</span> <span class="no">forward</span> <span class="no">progress</span> <span class="no">guarantee</span> <span class="no">is</span> <span class="no">kept</span><span class="p">,</span> <span class="no">but</span>
+	 <span class="err">*</span> <span class="nf">we</span><span class="err">&#39;</span><span class="no">ll</span> <span class="no">ignore</span> <span class="no">that</span> <span class="no">here</span><span class="p">).</span>
+	 <span class="err">*</span>
+	 <span class="err">*</span> <span class="nf">Dangling</span> <span class="no">load</span> <span class="no">reservations</span> <span class="no">can</span> <span class="no">be</span> <span class="no">the</span> <span class="no">result</span> <span class="no">of</span> <span class="no">taking</span> <span class="no">a</span> <span class="no">trap</span> <span class="no">in</span> <span class="no">the</span>
+	 <span class="err">*</span> <span class="nf">middle</span> <span class="no">of</span> <span class="no">an</span> <span class="no">LR</span><span class="err">/</span><span class="no">SC</span> <span class="no">sequence</span><span class="p">,</span> <span class="no">but</span> <span class="no">can</span> <span class="no">also</span> <span class="no">be</span> <span class="no">the</span> <span class="no">result</span> <span class="no">of</span> <span class="no">a</span> <span class="no">taken</span>
+	 <span class="err">*</span> <span class="nf">forward</span> <span class="no">branch</span> <span class="no">around</span> <span class="no">an</span> <span class="no">SC</span> <span class="p">--</span> <span class="no">which</span> <span class="no">is</span> <span class="no">how</span> <span class="no">we</span> <span class="no">implement</span> <span class="no">CAS.</span>  <span class="no">As</span> <span class="no">a</span>
+	 <span class="err">*</span> <span class="nf">result</span> <span class="no">we</span> <span class="no">need</span> <span class="no">to</span> <span class="no">clear</span> <span class="no">reservations</span> <span class="no">between</span> <span class="no">the</span> <span class="no">last</span> <span class="no">CAS</span> <span class="no">and</span> <span class="no">the</span>
+	 <span class="err">*</span> <span class="nf">jump</span> <span class="no">back</span> <span class="no">to</span> <span class="no">the</span> <span class="no">new</span> <span class="no">context.</span>  <span class="no">While</span> <span class="no">it</span> <span class="no">is</span> <span class="no">unlikely</span> <span class="no">the</span> <span class="no">store</span>
+	 <span class="err">*</span> <span class="nf">completes</span><span class="p">,</span> <span class="no">implementations</span> <span class="no">are</span> <span class="no">allowed</span> <span class="no">to</span> <span class="no">expand</span> <span class="no">reservations</span> <span class="no">to</span> <span class="no">be</span>
+	 <span class="err">*</span> <span class="nf">arbitrarily</span> <span class="no">large.</span>
+	 <span class="err">*/</span>
+	<span class="nf">REG_L</span>  <span class="no">a2</span><span class="p">,</span> <span class="no">PT_EPC</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_SC</span> <span class="no">x0</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">PT_EPC</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+
+	<span class="nf">csrw</span> <span class="no">CSR_STATUS</span><span class="p">,</span> <span class="no">a0</span>
+	<span class="nf">csrw</span> <span class="no">CSR_EPC</span><span class="p">,</span> <span class="no">a2</span>
+
+	<span class="nf">REG_L</span> <span class="no">x1</span><span class="p">,</span>  <span class="no">PT_RA</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x3</span><span class="p">,</span>  <span class="no">PT_GP</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x4</span><span class="p">,</span>  <span class="no">PT_TP</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x5</span><span class="p">,</span>  <span class="no">PT_T0</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x6</span><span class="p">,</span>  <span class="no">PT_T1</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x7</span><span class="p">,</span>  <span class="no">PT_T2</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x8</span><span class="p">,</span>  <span class="no">PT_S0</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x9</span><span class="p">,</span>  <span class="no">PT_S1</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x10</span><span class="p">,</span> <span class="no">PT_A0</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x11</span><span class="p">,</span> <span class="no">PT_A1</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x12</span><span class="p">,</span> <span class="no">PT_A2</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x13</span><span class="p">,</span> <span class="no">PT_A3</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x14</span><span class="p">,</span> <span class="no">PT_A4</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x15</span><span class="p">,</span> <span class="no">PT_A5</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x16</span><span class="p">,</span> <span class="no">PT_A6</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x17</span><span class="p">,</span> <span class="no">PT_A7</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x18</span><span class="p">,</span> <span class="no">PT_S2</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x19</span><span class="p">,</span> <span class="no">PT_S3</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x20</span><span class="p">,</span> <span class="no">PT_S4</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x21</span><span class="p">,</span> <span class="no">PT_S5</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x22</span><span class="p">,</span> <span class="no">PT_S6</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x23</span><span class="p">,</span> <span class="no">PT_S7</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x24</span><span class="p">,</span> <span class="no">PT_S8</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x25</span><span class="p">,</span> <span class="no">PT_S9</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x26</span><span class="p">,</span> <span class="no">PT_S10</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x27</span><span class="p">,</span> <span class="no">PT_S11</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x28</span><span class="p">,</span> <span class="no">PT_T3</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x29</span><span class="p">,</span> <span class="no">PT_T4</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x30</span><span class="p">,</span> <span class="no">PT_T5</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+	<span class="nf">REG_L</span> <span class="no">x31</span><span class="p">,</span> <span class="no">PT_T6</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+
+	<span class="nf">REG_L</span> <span class="no">x2</span><span class="p">,</span>  <span class="no">PT_SP</span><span class="p">(</span><span class="no">sp</span><span class="p">)</span>
+
+<span class="c">#ifdef CONFIG_RISCV_M_MODE
+</span><span class="c"></span>	<span class="nf">mret</span>
+<span class="c">#else
+</span><span class="c"></span>	<span class="nf">sret</span>
+<span class="c">#endif
+</span></code></pre></div><p><code>SC</code>(Store conditional)を発行して、<code>reservation</code>をクリアする。
+<code>reservation</code>(<code>load reserved</code>によりセット)はプロセッサのステートなので、復元が必要。（復元の代わりにSCを発行することでreservationをクリアする。
+任意の大きさの場合は<code>AMO fault</code>となるはず。)
+<code>sstatus</code>、<code>sepc</code>、汎用レジスタを復元する。
+システムコールの戻り値は<code>pt_regs-&gt;a0</code>に保存済みである。
+最後に<code>sp</code>を復元していることに注意。
+その後、<code>sret</code>を行い、例外元のカーネルへ復帰する。(<code>sstatus.spp == S-mode</code>)</p>
+<p>次にユーザーモードへ戻る場合を見てみる。</p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="nl">resume_userspace:</span>
+	<span class="err">/*</span> <span class="nf">Interrupts</span> <span class="no">must</span> <span class="no">be</span> <span class="no">disabled</span> <span class="no">here</span> <span class="no">so</span> <span class="no">flags</span> <span class="no">are</span> <span class="no">checked</span> <span class="no">atomically</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">REG_L</span> <span class="no">s0</span><span class="p">,</span> <span class="no">TASK_TI_FLAGS</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span> <span class="err">/</span><span class="p">*</span> <span class="no">current_thread_info-</span><span class="err">&gt;</span><span class="no">flags</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">andi</span> <span class="no">s1</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">_TIF_WORK_MASK</span>
+	<span class="nf">bnez</span> <span class="no">s1</span><span class="p">,</span> <span class="no">work_pending</span>
+
+<span class="c">#ifdef CONFIG_CONTEXT_TRACKING
+</span><span class="c"></span>	<span class="nf">call</span> <span class="no">context_tracking_user_enter</span>
+<span class="c">#endif
+</span><span class="c"></span>
+	<span class="err">/*</span> <span class="nf">Save</span> <span class="no">unwound</span> <span class="no">kernel</span> <span class="no">stack</span> <span class="no">pointer</span> <span class="no">in</span> <span class="no">thread_info</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">addi</span> <span class="no">s0</span><span class="p">,</span> <span class="no">sp</span><span class="p">,</span> <span class="no">PT_SIZE_ON_STACK</span>
+	<span class="nf">REG_S</span> <span class="no">s0</span><span class="p">,</span> <span class="no">TASK_TI_KERNEL_SP</span><span class="p">(</span><span class="no">tp</span><span class="p">)</span>
+
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">Save</span> <span class="no">TP</span> <span class="no">into</span> <span class="no">the</span> <span class="no">scratch</span> <span class="no">register</span> <span class="p">,</span> <span class="no">so</span> <span class="no">we</span> <span class="no">can</span> <span class="no">find</span> <span class="no">the</span> <span class="no">kernel</span> <span class="no">data</span>
+	 <span class="err">*</span> <span class="nf">structures</span> <span class="no">again.</span>
+	 <span class="err">*/</span>
+	<span class="nf">csrw</span> <span class="no">CSR_SCRATCH</span><span class="p">,</span> <span class="no">tp</span>
+</code></pre></div><p><code>thread_info-&gt;flags</code>を見て、シグナル、コールバック、リスケジュールが必要な際には<code>work_pending</code>を実行する。
+それ以外の場合は、<code>s0</code>にスタックポインタを戻したものを作成し、<code>task_struct</code>の<code>kernel sp</code>へ保存する。
+<code>tp</code>を<code>scratch</code>とスワップし、カーネルのデータ構造へのポインタを<code>sscratch</code>へ保存する。
+その後は<code>restore_all</code>と同じである。ただし、<code>sstatus-&gt;spp == U-mode</code>なので、ユーザースペースへ復帰する。</p>
+<p><code>arch/riscv/include/asm/thread_info.h</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="err">/*</span>
+ <span class="err">*</span> <span class="nf">thread</span> <span class="no">information</span> <span class="no">flags</span>
+ <span class="err">*</span> <span class="err">-</span> <span class="nf">these</span> <span class="no">are</span> <span class="no">process</span> <span class="no">state</span> <span class="no">flags</span> <span class="no">that</span> <span class="no">various</span> <span class="no">assembly</span> <span class="no">files</span> <span class="no">may</span> <span class="no">need</span> <span class="no">to</span>
+ <span class="err">*</span>   <span class="nf">access</span>
+ <span class="err">*</span> <span class="err">-</span> <span class="nf">pending</span> <span class="no">work-to-be-done</span> <span class="no">flags</span> <span class="no">are</span> <span class="no">in</span> <span class="no">lowest</span> <span class="no">half-word</span>
+ <span class="err">*</span> <span class="err">-</span> <span class="nf">other</span> <span class="no">flags</span> <span class="no">in</span> <span class="no">upper</span> <span class="no">half-word</span><span class="p">(</span><span class="no">s</span><span class="p">)</span>
+ <span class="err">*/</span>
+<span class="c">#define TIF_SYSCALL_TRACE	0	/* syscall trace active */
+</span><span class="c">#define TIF_NOTIFY_RESUME	1	/* callback before returning to user */
+</span><span class="c">#define TIF_SIGPENDING		2	/* signal pending */
+</span><span class="c">#define TIF_NEED_RESCHED	3	/* rescheduling necessary */
+</span><span class="c">#define TIF_RESTORE_SIGMASK	4	/* restore signal mask in do_signal() */
+</span><span class="c">#define TIF_MEMDIE		5	/* is terminating due to OOM killer */
+</span><span class="c">#define TIF_SYSCALL_TRACEPOINT  6       /* syscall tracepoint instrumentation */
+</span><span class="c">#define TIF_SYSCALL_AUDIT	7	/* syscall auditing */
+</span><span class="c">#define TIF_SECCOMP		8	/* syscall secure computing */
+</span><span class="c"></span>
+<span class="c">#define _TIF_SYSCALL_TRACE	(1 &lt;&lt; TIF_SYSCALL_TRACE)
+</span><span class="c">#define _TIF_NOTIFY_RESUME	(1 &lt;&lt; TIF_NOTIFY_RESUME)
+</span><span class="c">#define _TIF_SIGPENDING		(1 &lt;&lt; TIF_SIGPENDING)
+</span><span class="c">#define _TIF_NEED_RESCHED	(1 &lt;&lt; TIF_NEED_RESCHED)
+</span><span class="c">#define _TIF_SYSCALL_TRACEPOINT	(1 &lt;&lt; TIF_SYSCALL_TRACEPOINT)
+</span><span class="c">#define _TIF_SYSCALL_AUDIT	(1 &lt;&lt; TIF_SYSCALL_AUDIT)
+</span><span class="c">#define _TIF_SECCOMP		(1 &lt;&lt; TIF_SECCOMP)
+</span><span class="c"></span>
+
+<span class="c">#define _TIF_WORK_MASK \
+</span><span class="c"></span>	<span class="err">(</span><span class="nf">_TIF_NOTIFY_RESUME</span> <span class="err">|</span> <span class="no">_TIF_SIGPENDING</span> <span class="err">|</span> <span class="no">_TIF_NEED_RESCHED</span><span class="p">)</span>
+
+</code></pre></div><p>これで、おおよそトラップ時の動作を見た。
+トラップの処理自体を詳しく理解するには、<code>excp_vect_table</code>、<code>sys_call_table</code>、<code>do_trap_unknown</code>、<code>handle_arch_irq</code>を読む必要がある。
+また、<code>work_pending</code>や<code>ptrace</code>関連のパスは読んでいないが、後に必要になるかもしれない。</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
+</div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part1/"><span class="iconfont icon-article"></span>My RISC-V debug feature part1</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part5/"><span class="iconfont icon-article"></span>Reading linux kernel part5</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">©2021 koyamanX</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section></body>
+
+</html>

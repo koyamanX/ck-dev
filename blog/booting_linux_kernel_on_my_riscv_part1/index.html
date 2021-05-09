@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>Booting linux kernel on my RISC-V part1&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Booting linux kernel on my RISC-V part1" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">Booting linux kernel on my RISC-V part1</h1><p class="article date">Tuesday, March 16, 2021</p></section><article class="article markdown-body"><h2 id="概要">概要</h2>
+<p><a href="https://koyamanx.github.io/ck-dev/blog/build_linux_for_my_riscv_processor/">前回</a>
+ビルドしたLinuxを用いてシミュレーションを行った。
+しかし、例外が発生し、処理が進まない。
+今回は、原因を追求してみようと思う。</p>
+<h2 id="現状">現状</h2>
+<p>まずは、現状確認がてら実行した様子を示す。</p>
+<span class="image-container"><span class="link" ><a href="./image01.png" 
+        target="_blank"><img class="img" src="./image01.png"/></a></span>
+</span>
+<p><code>status: 00000100 badaddr: dead4ead cause: 0000000c epc: c044da24</code>
+がCSRの情報である。
+<code>cause: 0xc</code>なので、Instruction page faultである様子。
+どんな命令があるのか見てみる。\</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">riscv32-unknown-linux-gnu-objdump linux/vmlinux <span class="p">|</span>less
+</code></pre></div><p>でディスアセンブルする。
+<code>c044da24:</code>で検索すると以下の命令であることがわかる。
+<span class="image-container"><span class="link" ><a href="./image02.png" 
+        target="_blank"><img class="img" src="./image02.png"/></a></span>
+</span>
+<code>__printk_safe_flush</code>関数の命令の一部である。
+シミュレータで<code>0ef725af amoswap.w.aqrl a1, a5, (a4)</code>が実行される際のレジスタをダンプする。
+<span class="image-container"><span class="link" ><a href="./image03.png" 
+        target="_blank"><img class="img" src="./image03.png"/></a></span>
+</span>
+<code>a4: c140c9c4 a5: 00000000</code>であることがわかる。
+よって、<code>a1 &lt;- *(0xc140c9c4), *(0xc140c9c4) &lt;- 0x00000000</code>となる。
+また、シーケンシャルコンシステンシーで、ワードサイズのオペレーションである。
+というか、Instruction page faultのはずが、Store amo address misalignedとなっている。
+おかしい。</p>
+<ul>
+<li>おそらく、Store amo address misalignedが正しい</li>
+<li>Store amo address misalignedのときのscauceがおかしい？
+<ul>
+<li>mcauseは？</li>
+<li>OpenSBIがM-ModeのトラップをS-Modeへredirectする。</li>
+</ul>
+</li>
+<li>Address misalignedの検出回路がおかしい？
+<ul>
+<li>inst: 0x0ef725af</li>
+<li>a1: 0xc140c9c4</li>
+<li>byteen: MEM_WORD</li>
+</ul>
+</li>
+</ul>
+<h3 id="store-amo-address-misalignedのときのscauceがおかしい">Store amo address misalignedのときのscauceがおかしい？</h3>
+<p>まずは、mcauseの値を見てみる。
+シミュレータ上では、Store amo address misalignedとなっているので、mcauseは正しいはず。
+<code>sbi_trap_handler</code>内(80003b5c)で、csr s1, mcause命令でmcauseをs1レジスタに読み出している。
+<span class="image-container"><span class="link" ><a href="./image04.png" 
+        target="_blank"><img class="img" src="./image04.png"/></a></span>
+</span>
+<code>sbi_trap_handler</code>はOpenSBIの一部であり、mtvecアドレスがにセットされている。
+よって、トラップ時に実行される。S-Modeで対処可能なトラップはredirectされる。
+mcauseは0x6となっているのがわかる。
+0x6はStore AMO address misalignedを示す。
+<code>sbi_trap_redirect</code>関数の一部で、scauseに0x6をセットしているので、Linuxカーネルには正しく0x6が渡されている。
+よって、カーネル内どこかでscauseに0xcがセットされているよう?
+ひとまず、これは保留。
+<span class="image-container"><span class="link" ><a href="./image05.png" 
+        target="_blank"><img class="img" src="./image05.png"/></a></span>
+</span></p>
+<h3 id="address-misalignedの検出回路がおかしい">Address misalignedの検出回路がおかしい？</h3>
+<p>検出はアドレス計算をするexecuteステージで行っている。
+以下にNSLのコード片を示すが、AMO命令に関してはワード境界に整列されたアドレスに対するワード単位の演算しかサポートしていない。</p>
+<pre><code>...
+#define MEM_WORD 0x2
+#define MEM_HALFWORD 0x1
+#define MEM_BYTE 0x0
+...
+			any {
+				/* Data address misaligned */
+				((alu_q[1:0] != 2'b00) &amp;&amp; ({1'b0, DEREG.funct3[1:0]} == MEM_WORD)):			m_misaligned();
+				((alu_q[0] != 1'b0) &amp;&amp; ({1'b0, DEREG.funct3[1:0]} == MEM_HALFWORD)):		m_misaligned();
+				((DEREG.rs1_data[1:0] != 2'b00) &amp;&amp; ({1'b0, DEREG.funct3[1:0]} == MEM_WORD)):a_misaligned();
+			}
+			/* Exceptions in execute stage */
+			any {
+				(DEREG.illegal_instruction):	illegal_instruction_execute_stage();
+				(i_misaligned):					instruction_address_misaligned(target_address);
+				(DEREG.load &amp;&amp; m_misaligned):	load_address_misaligned(alu_q);
+				(DEREG.store &amp;&amp; m_misaligned):	store_address_misaligned(alu_q);
+				(DEREG.amo &amp;&amp; a_misaligned):	store_address_misaligned(DEREG.rs1_data);
+			}
+</code></pre><p><code>0x0ef725af amoswap.w.aqrl a1, a5, (a4)</code>より、funct3は0x2である。
+<span class="image-container"><span class="link" ><a href="./image06.png" 
+        target="_blank"><img class="img" src="./image06.png"/></a></span>
+</span>
+<code>rs1_data: 0xc140c9c4</code>なので、ワード境界に整列している。
+また、funct3==0x2なので、MEM_WORDと同値である。
+もしかして、rs1_dataが正しくフォワーディングされていないのでは？</p>
+<h3 id="rs1_dataが正しくフォワーディングされていないのでは">rs1_dataが正しくフォワーディングされていないのでは？</h3>
+<p>フォワーディングが正しくない。
+DEREG(Decode/Executeのパイプラインレジスタ)からrs1のデータを読み出しているが、正しくはパイプラインレジスタからではなく、フォワーディングする必要がある。
+細かいが、execute_alu_aがexecuteステージに向けたrs1用のフォワーディングパスである。
+rs1_dataとして、execute_alu_aを用いる。
+フォワーディングするかしないかは、命令ごとにalu_a_forward_en端子にて制御する。
+AMO命令では、rs1のデータをフォワーディングをする。
+以下のように修正して、再度シミュレータをコンパイルした。</p>
+<pre><code>			any {
+				/* Data address misaligned */
+				((alu_q[1:0] != 2'b00) &amp;&amp; ({1'b0, DEREG.funct3[1:0]} == MEM_WORD)):			m_misaligned();
+				((alu_q[0] != 1'b0) &amp;&amp; ({1'b0, DEREG.funct3[1:0]} == MEM_HALFWORD)):		m_misaligned();
+				((execute_alu_a[1:0] != 2'b00) &amp;&amp; ({1'b0, DEREG.funct3[1:0]} == MEM_WORD)):a_misaligned();
+			}
+			/* Exceptions in execute stage */
+			any {
+				(DEREG.illegal_instruction):	illegal_instruction_execute_stage();
+				(i_misaligned):					instruction_address_misaligned(target_address);
+				(DEREG.load &amp;&amp; m_misaligned):	load_address_misaligned(alu_q);
+				(DEREG.store &amp;&amp; m_misaligned):	store_address_misaligned(alu_q);
+				(DEREG.amo &amp;&amp; a_misaligned):	store_address_misaligned(execute_alu_a);
+			}
+</code></pre><p>再度、riscv-testsを実施した。正しくパスしている。
+<span class="image-container"><span class="link" ><a href="./image07.png" 
+        target="_blank"><img class="img" src="./image07.png"/></a></span>
+</span>
+というか、前までも(すり抜けて)パスしていた。
+問題となっているパターンは</p>
+<pre><code>addi a4, s6, -4
+amoswap.w.aqrl a1, a5, (a4)
+</code></pre><p>のような先発のrdが後発のrs1となっているパターンである。
+そこそこ、限定的な上に、AMO命令なので、気づくのにかなり時間を要した。</p>
+<h3 id="linuxの再実行">Linuxの再実行</h3>
+<p>再度、Linuxをシミュレータ上で実行してみる。
+<span class="image-container"><span class="link" ><a href="./image08.png" 
+        target="_blank"><img class="img" src="./image08.png"/></a></span>
+</span>
+進展した。しかし、ハングした。
+さらなる問題が発生したので、次回はこの問題の原因の追求をする。
+仮想メモリのマップ(Virtual kernel memory layout)はどうやって決めているのだろう。
+RV32XSoCにはPCIとかインストールしていないよ?</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/cpu/>CPU</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
+</div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part1/"><span class="iconfont icon-article"></span>Reading OpenSBI part1</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/build_linux_for_my_riscv_processor/"><span class="iconfont icon-article"></span>Building Linux kernel for my RISC-V SoC(RV32X SoC)</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">©2021 koyamanX</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section></body>
+
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>Reading OpenSBI part5&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Reading OpenSBI part5" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">Reading OpenSBI part5</h1><p class="article date">Wednesday, March 17, 2021</p></section><article class="article markdown-body"><p><a href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part4/">前回</a>
+はプラットフォームの初期化まで読んだ。今回はFDTのリロケーションと<code>_start_warm</code>を詳しく読んでいく。</p>
+<h3 id="fdt-relocation">FDT relocation</h3>
+<p>前段のブートローダーより受け取ったFDTのPAをOpenSBIのメモリ空間(<code>FW_PAYLOAD_FDT_ADDR</code>により指定されていれば)にリロケーションする。
+<code>FW_PAYLOAD_FDT_ADDR</code>の指定がない場合は、リロケーションはしない。
+<code>firmware/fw_base.S</code></p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
+	<span class="err">/*</span>
+	 <span class="err">*</span> <span class="nf">Relocate</span> <span class="no">Flatened</span> <span class="no">Device</span> <span class="no">Tree</span> <span class="p">(</span><span class="no">FDT</span><span class="p">)</span>
+	 <span class="err">*</span> <span class="nf">source</span> <span class="no">FDT</span> <span class="no">address</span> <span class="err">=</span> <span class="no">previous</span> <span class="no">arg1</span>
+	 <span class="err">*</span> <span class="nf">destination</span> <span class="no">FDT</span> <span class="no">address</span> <span class="err">=</span> <span class="no">next</span> <span class="no">arg1</span>
+	 <span class="err">*</span>
+	 <span class="err">*</span> <span class="nl">Note:</span> <span class="nf">We</span> <span class="no">will</span> <span class="no">preserve</span> <span class="no">a0</span> <span class="no">and</span> <span class="no">a1</span> <span class="no">passed</span> <span class="no">by</span>
+	 <span class="err">*</span> <span class="nf">previous</span> <span class="no">booting</span> <span class="no">stage.</span>
+	 <span class="err">*/</span>
+	<span class="nf">beqz</span>	<span class="no">a1</span><span class="p">,</span> <span class="no">_fdt_reloc_done</span>
+	<span class="err">/*</span> <span class="nf">Mask</span> <span class="no">values</span> <span class="no">in</span> <span class="no">a3</span> <span class="no">and</span> <span class="no">a4</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">li</span>	<span class="no">a3</span><span class="p">,</span> <span class="err">~</span><span class="p">(</span><span class="no">__SIZEOF_POINTER__</span> <span class="p">-</span> <span class="mi">1</span><span class="p">)</span>
+	<span class="nf">li</span>	<span class="no">a4</span><span class="p">,</span> <span class="mi">0xff</span>
+	<span class="err">/*</span> <span class="nf">t1</span> <span class="err">=</span> <span class="no">destination</span> <span class="no">FDT</span> <span class="no">start</span> <span class="no">address</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">MOV_3R</span>	<span class="no">s0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s2</span><span class="p">,</span> <span class="no">a2</span>
+	<span class="nf">call</span>	<span class="no">fw_next_arg1</span>
+	<span class="nf">add</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">MOV_3R</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">s2</span>
+	<span class="nf">beqz</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">_fdt_reloc_done</span>
+	<span class="nf">beq</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">_fdt_reloc_done</span>
+	<span class="nf">and</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">a3</span>
+	<span class="err">/*</span> <span class="nf">t0</span> <span class="err">=</span> <span class="no">source</span> <span class="no">FDT</span> <span class="no">start</span> <span class="no">address</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">and</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">a3</span>
+	<span class="err">/*</span> <span class="nf">t2</span> <span class="err">=</span> <span class="no">source</span> <span class="no">FDT</span> <span class="no">size</span> <span class="no">in</span> <span class="no">big-endian</span> <span class="p">*</span><span class="err">/</span>
+<span class="c">#if __riscv_xlen == 64
+</span><span class="c"></span>	<span class="nf">lwu</span>	<span class="no">t2</span><span class="p">,</span> <span class="mi">4</span><span class="p">(</span><span class="no">t0</span><span class="p">)</span>
+<span class="c">#else
+</span><span class="c"></span>	<span class="nf">lw</span>	<span class="no">t2</span><span class="p">,</span> <span class="mi">4</span><span class="p">(</span><span class="no">t0</span><span class="p">)</span>
+<span class="c">#endif
+</span><span class="c"></span>	<span class="err">/*</span> <span class="nf">t3</span> <span class="err">=</span> <span class="no">bit</span><span class="p">[</span><span class="mi">15</span><span class="p">:</span><span class="mi">8</span><span class="p">]</span> <span class="no">of</span> <span class="no">FDT</span> <span class="no">size</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">srli</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="mi">16</span>
+	<span class="nf">and</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="nf">slli</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="mi">8</span>
+	<span class="err">/*</span> <span class="nf">t4</span> <span class="err">=</span> <span class="no">bit</span><span class="p">[</span><span class="mi">23</span><span class="p">:</span><span class="mi">16</span><span class="p">]</span> <span class="no">of</span> <span class="no">FDT</span> <span class="no">size</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">srli</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t4</span><span class="p">,</span> <span class="mi">8</span>
+	<span class="nf">and</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t4</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="nf">slli</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t4</span><span class="p">,</span> <span class="mi">16</span>
+	<span class="err">/*</span> <span class="nf">t5</span> <span class="err">=</span> <span class="no">bit</span><span class="p">[</span><span class="mi">31</span><span class="p">:</span><span class="mi">24</span><span class="p">]</span> <span class="no">of</span> <span class="no">FDT</span> <span class="no">size</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t5</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">and</span>	<span class="no">t5</span><span class="p">,</span> <span class="no">t5</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="nf">slli</span>	<span class="no">t5</span><span class="p">,</span> <span class="no">t5</span><span class="p">,</span> <span class="mi">24</span>
+	<span class="err">/*</span> <span class="nf">t2</span> <span class="err">=</span> <span class="no">bit</span><span class="p">[</span><span class="mi">7</span><span class="p">:</span><span class="mi">0</span><span class="p">]</span> <span class="no">of</span> <span class="no">FDT</span> <span class="no">size</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">srli</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="mi">24</span>
+	<span class="nf">and</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="err">/*</span> <span class="nf">t2</span> <span class="err">=</span> <span class="no">FDT</span> <span class="no">size</span> <span class="no">in</span> <span class="no">little-endian</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">or</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">t3</span>
+	<span class="nf">or</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">t4</span>
+	<span class="nf">or</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">t5</span>
+	<span class="err">/*</span> <span class="nf">t2</span> <span class="err">=</span> <span class="no">destination</span> <span class="no">FDT</span> <span class="no">end</span> <span class="no">address</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">t2</span>
+	<span class="err">/*</span> <span class="nf">FDT</span> <span class="no">copy</span> <span class="no">loop</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">ble</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">_fdt_reloc_done</span>
+<span class="nl">_fdt_reloc_again:</span>
+	<span class="nf">REG_L</span>	<span class="no">t3</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t0</span><span class="p">)</span>
+	<span class="nf">REG_S</span>	<span class="no">t3</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t1</span><span class="p">)</span>
+	<span class="nf">add</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">__SIZEOF_POINTER__</span>
+	<span class="nf">add</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">__SIZEOF_POINTER__</span>
+	<span class="nf">blt</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">_fdt_reloc_again</span>
+<span class="nl">_fdt_reloc_done:</span>
+
+	<span class="err">/*</span> <span class="nf">mark</span> <span class="no">boot</span> <span class="no">hart</span> <span class="no">done</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">li</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">BOOT_STATUS_BOOT_HART_DONE</span>
+	<span class="nf">la</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">_boot_status</span>
+	<span class="nf">REG_S</span>	<span class="no">t0</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t1</span><span class="p">)</span>
+	<span class="nf">fence</span>	<span class="no">rw</span><span class="p">,</span> <span class="no">rw</span>
+	<span class="nf">j</span>	<span class="no">_start_warm</span>
+<span class="na">...</span>
+</code></pre></div><p><code>a1</code>レジスタは前段のブートローダーより渡された(OpenSBIでないことに注意)、FDTのPAを持っているわけであるが、<br>
+<code>beqz a1, _fdt_reloc_done</code><br>
+により<code>NULL</code>であれば、<code>_fdt_reloc_done</code>とする。</p>
+<p><code>a3</code>レジスタにマスクをつくる。(<code>__SIZEOF_POINTER__</code>からワードアドレスのマスクを作る)
+例えば、32bitであれば、下位2ビットをマスクする。</p>
+<p>レジスタを退避する。<code>(s0, s1, s2) &lt;- (a0, a1, a2)</code>
+<code>fw_next_arg1</code>関数を呼び、FDTのPA(OpenSBIにより渡されるFDT PA、もしあれば)をa0レジスタに取得する。(<code>firmware/fw_payload.S</code>)
+<code>t1</code>レジスタにオリジナルの値(FDT PA src)を保存する。
+レジスタの復帰<code>(a0, a1, a2) &lt;- (s0, s1, s2)</code>。
+読み出した、FDT PAの<code>NULL</code>チェックをする。
+OpenSBIのFDTと前段のブートローダーより受け取ったFDTが同じもの(アドレス的に)の場合は、リロケーションはしない。(同じ場合はすでに、FDTはOpenSBIのメモリ空間に存在するはず。)</p>
+<p><br>
+ここからの処理は<code>(a1 != NULL) &amp;&amp; (t1 != NULL) &amp;&amp; (a1 != t1)</code>であることが保証されている。
+ただし、<code>a1</code>は前段のブートローダーからのFDT PAで、<code>t1</code>はOpenSBIにより配置されるFDTのPAである。
+FDTのPAを先程作ったマスクで、ワードアドレスにする。(FDTはワード境界に配置されていることを前提にしているはず。後続のコードはワード単位でアクセス。）
+前段のブートローダーより受け取ったFDT PAを<code>a1</code>レジスタから<code>t0</code>レジスタへ移す。マスクをして、ワードアドレスにする。
+<code>t0</code>アドレスはソースアドレスである。</p>
+<h3 id="fdtのサイズ取得">FDTのサイズ取得</h3>
+<p>FDTの情報はFDTの先頭にある<code>fdt header</code>にて示される。
+構造体は以下のようなものとなる。(<a href="https://www.devicetree.org/specifications/"target="_blank" rel="noopener noreferrer">Device Tree Specification v0.3参考</a>
+)
+データはBig-endianで表現される。</p>
+<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="k">struct</span> <span class="n">fdt_header</span> <span class="p">{</span>
+	<span class="n">uint32_t</span> <span class="n">magic</span><span class="p">;</span>
+	<span class="n">uint32_t</span> <span class="n">totalsize</span><span class="p">;</span>
+	<span class="n">uint32_t</span> <span class="n">off_dt_struct</span><span class="p">;</span>
+	<span class="n">uint32_t</span> <span class="n">off_dt_strings</span><span class="p">;</span>
+	<span class="n">uint32_t</span> <span class="n">off_mem_rsvmap</span><span class="p">;</span>
+	<span class="n">uint32_t</span> <span class="n">version</span><span class="p">;</span>
+	<span class="n">uint32_t</span> <span class="n">last_comp_version</span><span class="p">;</span>
+	<span class="n">uint32_t</span> <span class="n">boot_cpuid_phys</span><span class="p">;</span>
+	<span class="n">uint32_t</span> <span class="n">size_dt_strings</span><span class="p">;</span>
+	<span class="n">uint32_t</span> <span class="n">size_dt_struct</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div><p>ロード命令で構造体のオフセット(0x4)である、totalsizeを<code>t2</code>レジスタに取得する。
+RV32の場合は<code>lw</code>命令でロードできるが、RV64の場合は64ビットに符号拡張されることを防ぐため(<code>lwu</code>)を使用する。
+RISC-VはLittle-endianなので、totalsizeを<code>t2</code>レジスタへ変換をする。
+上に上げたコード片からエンディアンの変換部分を抜粋。</p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
+	<span class="err">/*</span> <span class="nf">t3</span> <span class="err">=</span> <span class="no">bit</span><span class="p">[</span><span class="mi">15</span><span class="p">:</span><span class="mi">8</span><span class="p">]</span> <span class="no">of</span> <span class="no">FDT</span> <span class="no">size</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">srli</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="mi">16</span>
+	<span class="nf">and</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="nf">slli</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="mi">8</span>
+	<span class="err">/*</span> <span class="nf">t4</span> <span class="err">=</span> <span class="no">bit</span><span class="p">[</span><span class="mi">23</span><span class="p">:</span><span class="mi">16</span><span class="p">]</span> <span class="no">of</span> <span class="no">FDT</span> <span class="no">size</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">srli</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t4</span><span class="p">,</span> <span class="mi">8</span>
+	<span class="nf">and</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t4</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="nf">slli</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t4</span><span class="p">,</span> <span class="mi">16</span>
+	<span class="err">/*</span> <span class="nf">t5</span> <span class="err">=</span> <span class="no">bit</span><span class="p">[</span><span class="mi">31</span><span class="p">:</span><span class="mi">24</span><span class="p">]</span> <span class="no">of</span> <span class="no">FDT</span> <span class="no">size</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">add</span>	<span class="no">t5</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">zero</span>
+	<span class="nf">and</span>	<span class="no">t5</span><span class="p">,</span> <span class="no">t5</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="nf">slli</span>	<span class="no">t5</span><span class="p">,</span> <span class="no">t5</span><span class="p">,</span> <span class="mi">24</span>
+	<span class="err">/*</span> <span class="nf">t2</span> <span class="err">=</span> <span class="no">bit</span><span class="p">[</span><span class="mi">7</span><span class="p">:</span><span class="mi">0</span><span class="p">]</span> <span class="no">of</span> <span class="no">FDT</span> <span class="no">size</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">srli</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="mi">24</span>
+	<span class="nf">and</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">a4</span>
+	<span class="err">/*</span> <span class="nf">t2</span> <span class="err">=</span> <span class="no">FDT</span> <span class="no">size</span> <span class="no">in</span> <span class="no">little-endian</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">or</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">t3</span>
+	<span class="nf">or</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">t4</span>
+	<span class="nf">or</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">t5</span>
+<span class="na">...</span>
+</code></pre></div><h3 id="fdtをソースからディスティネーションへコピー">FDTをソースからディスティネーションへコピー</h3>
+<p><code>t1</code>レジスタにはOpenSBIによりロードされるFDTのPAがある。(<code>FW_PAYLOAD_FDT_ADDR</code>が指定)
+<code>t1</code>レジスタはディスティネーションを示す。
+<code>t2</code>レジスタ(totalsize)に、<code>t1</code>レジスタを足すことで、ディスティネーションでのFDTの最終アドレス(高位アドレス)がわかる。
+<code>ble	t2, t1, _fdt_reloc_done</code>にて、totalsizeが正当であるか(0以下でないか)チェックしている。</p>
+<p>最初に上げたコード片よりコピー処理を抜粋。</p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm">	<span class="nf">ble</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">_fdt_reloc_done</span>
+<span class="nl">_fdt_reloc_again:</span>
+	<span class="nf">REG_L</span>	<span class="no">t3</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t0</span><span class="p">)</span>
+	<span class="nf">REG_S</span>	<span class="no">t3</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t1</span><span class="p">)</span>
+	<span class="nf">add</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">__SIZEOF_POINTER__</span>
+	<span class="nf">add</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">__SIZEOF_POINTER__</span>
+	<span class="nf">blt</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">_fdt_reloc_again</span>
+<span class="nl">_fdt_reloc_done:</span>
+
+</code></pre></div><h3 id="boot-hartの処理完了">boot hartの処理完了</h3>
+<p><code>_boot_status</code>に完了のステータスコードを保存し、fence命令で他のコアから見えることを保証する。
+その後、hartのwarm boot(<code>_start_warm</code>)の処理になる。</p>
+<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm">	<span class="err">/*</span> <span class="nf">mark</span> <span class="no">boot</span> <span class="no">hart</span> <span class="no">done</span> <span class="p">*</span><span class="err">/</span>
+	<span class="nf">li</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">BOOT_STATUS_BOOT_HART_DONE</span>
+	<span class="nf">la</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">_boot_status</span>
+	<span class="nf">REG_S</span>	<span class="no">t0</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t1</span><span class="p">)</span>
+	<span class="nf">fence</span>	<span class="no">rw</span><span class="p">,</span> <span class="no">rw</span>
+	<span class="nf">j</span>	<span class="no">_start_warm</span>
+</code></pre></div><p>長くなってきたので、<code>_start_warm</code>は次回に見送る。</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
+</div>
+<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part6/"><span class="iconfont icon-article"></span>Reading OpenSBI part6</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part4/"><span class="iconfont icon-article"></span>Reading OpenSBI part4</a></p></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">©2021 koyamanX</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section></body>
+
+</html>
