@@ -1,455 +1,384 @@
-<!DOCTYPE html>
-<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<meta name="supported-color-schemes" content="light dark"><title>Reading linux kernel part2&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Reading linux kernel part2" /><body><section id="header">
-    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
-        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
-    <h1 class="article title">Reading linux kernel part2</h1><p class="article date">Tuesday, March 23, 2021</p></section><article class="article markdown-body"><p><code>setup_vm</code>を読んでいく。</p>
-<h2 id="setup_vm">setup_vm</h2>
-<p><code>arch/riscv/mm/init.c</code></p>
-<p><code>setup_vm</code>の段階では、load addressからlink addressへのリロケーションが終わっていないので<code>PC-relative</code>なコード生成が必須である。</p>
-<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="n">asmlinkage</span> <span class="kt">void</span> <span class="n">__init</span> <span class="nf">setup_vm</span><span class="p">(</span><span class="n">uintptr_t</span> <span class="n">dtb_pa</span><span class="p">)</span>
-<span class="p">{</span>
-	<span class="n">uintptr_t</span> <span class="n">va</span><span class="p">,</span> <span class="n">end_va</span><span class="p">;</span>
-	<span class="n">uintptr_t</span> <span class="n">load_pa</span> <span class="o">=</span> <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)(</span><span class="o">&amp;</span><span class="n">_start</span><span class="p">);</span>
-	<span class="n">uintptr_t</span> <span class="n">load_sz</span> <span class="o">=</span> <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)(</span><span class="o">&amp;</span><span class="n">_end</span><span class="p">)</span> <span class="o">-</span> <span class="n">load_pa</span><span class="p">;</span>
-	<span class="n">uintptr_t</span> <span class="n">map_size</span> <span class="o">=</span> <span class="n">best_map_size</span><span class="p">(</span><span class="n">load_pa</span><span class="p">,</span> <span class="n">MAX_EARLY_MAPPING_SIZE</span><span class="p">);</span>
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>Reading linux kernel part2&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="Reading linux kernel part2"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">Reading linux kernel part2</h1><p class="article date">Tuesday, March 23, 2021</p></section><article class="article markdown-body"><p><code>setup_vm</code>を読んでいく。</p><h2 id=setup_vm>setup_vm</h2><p><code>arch/riscv/mm/init.c</code></p><p><code>setup_vm</code>の段階では、load addressからlink addressへのリロケーションが終わっていないので<code>PC-relative</code>なコード生成が必須である。</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=n>asmlinkage</span> <span class=kt>void</span> <span class=n>__init</span> <span class=nf>setup_vm</span><span class=p>(</span><span class=n>uintptr_t</span> <span class=n>dtb_pa</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>uintptr_t</span> <span class=n>va</span><span class=p>,</span> <span class=n>end_va</span><span class=p>;</span>
+	<span class=n>uintptr_t</span> <span class=n>load_pa</span> <span class=o>=</span> <span class=p>(</span><span class=n>uintptr_t</span><span class=p>)(</span><span class=o>&amp;</span><span class=n>_start</span><span class=p>);</span>
+	<span class=n>uintptr_t</span> <span class=n>load_sz</span> <span class=o>=</span> <span class=p>(</span><span class=n>uintptr_t</span><span class=p>)(</span><span class=o>&amp;</span><span class=n>_end</span><span class=p>)</span> <span class=o>-</span> <span class=n>load_pa</span><span class=p>;</span>
+	<span class=n>uintptr_t</span> <span class=n>map_size</span> <span class=o>=</span> <span class=n>best_map_size</span><span class=p>(</span><span class=n>load_pa</span><span class=p>,</span> <span class=n>MAX_EARLY_MAPPING_SIZE</span><span class=p>);</span>
 
-	<span class="n">va_pa_offset</span> <span class="o">=</span> <span class="n">PAGE_OFFSET</span> <span class="o">-</span> <span class="n">load_pa</span><span class="p">;</span>
-	<span class="n">pfn_base</span> <span class="o">=</span> <span class="n">PFN_DOWN</span><span class="p">(</span><span class="n">load_pa</span><span class="p">);</span>
+	<span class=n>va_pa_offset</span> <span class=o>=</span> <span class=n>PAGE_OFFSET</span> <span class=o>-</span> <span class=n>load_pa</span><span class=p>;</span>
+	<span class=n>pfn_base</span> <span class=o>=</span> <span class=n>PFN_DOWN</span><span class=p>(</span><span class=n>load_pa</span><span class=p>);</span>
 
-	<span class="cm">/*
-</span><span class="cm">	 * Enforce boot alignment requirements of RV32 and
-</span><span class="cm">	 * RV64 by only allowing PMD or PGD mappings.
-</span><span class="cm">	 */</span>
-	<span class="n">BUG_ON</span><span class="p">(</span><span class="n">map_size</span> <span class="o">==</span> <span class="n">PAGE_SIZE</span><span class="p">);</span>
+	<span class=cm>/*
+</span><span class=cm>	 * Enforce boot alignment requirements of RV32 and
+</span><span class=cm>	 * RV64 by only allowing PMD or PGD mappings.
+</span><span class=cm>	 */</span>
+	<span class=n>BUG_ON</span><span class=p>(</span><span class=n>map_size</span> <span class=o>==</span> <span class=n>PAGE_SIZE</span><span class=p>);</span>
 
-	<span class="cm">/* Sanity check alignment and size */</span>
-	<span class="n">BUG_ON</span><span class="p">((</span><span class="n">PAGE_OFFSET</span> <span class="o">%</span> <span class="n">PGDIR_SIZE</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">);</span>
-	<span class="n">BUG_ON</span><span class="p">((</span><span class="n">load_pa</span> <span class="o">%</span> <span class="n">map_size</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">);</span>
-	<span class="n">BUG_ON</span><span class="p">(</span><span class="n">load_sz</span> <span class="o">&gt;</span> <span class="n">MAX_EARLY_MAPPING_SIZE</span><span class="p">);</span>
+	<span class=cm>/* Sanity check alignment and size */</span>
+	<span class=n>BUG_ON</span><span class=p>((</span><span class=n>PAGE_OFFSET</span> <span class=o>%</span> <span class=n>PGDIR_SIZE</span><span class=p>)</span> <span class=o>!=</span> <span class=mi>0</span><span class=p>);</span>
+	<span class=n>BUG_ON</span><span class=p>((</span><span class=n>load_pa</span> <span class=o>%</span> <span class=n>map_size</span><span class=p>)</span> <span class=o>!=</span> <span class=mi>0</span><span class=p>);</span>
+	<span class=n>BUG_ON</span><span class=p>(</span><span class=n>load_sz</span> <span class=o>&gt;</span> <span class=n>MAX_EARLY_MAPPING_SIZE</span><span class=p>);</span>
 
-	<span class="cm">/* Setup early PGD for fixmap */</span>
-	<span class="n">create_pgd_mapping</span><span class="p">(</span><span class="n">early_pg_dir</span><span class="p">,</span> <span class="n">FIXADDR_START</span><span class="p">,</span>
-			   <span class="p">(</span><span class="n">uintptr_t</span><span class="p">)</span><span class="n">fixmap_pgd_next</span><span class="p">,</span> <span class="n">PGDIR_SIZE</span><span class="p">,</span> <span class="n">PAGE_TABLE</span><span class="p">);</span>
-</code></pre></div><h3 id="pgtableh">pgtable.h</h3>
-<p>わからないので、まずはヘッダーファイルから読んでいく。
+	<span class=cm>/* Setup early PGD for fixmap */</span>
+	<span class=n>create_pgd_mapping</span><span class=p>(</span><span class=n>early_pg_dir</span><span class=p>,</span> <span class=n>FIXADDR_START</span><span class=p>,</span>
+			   <span class=p>(</span><span class=n>uintptr_t</span><span class=p>)</span><span class=n>fixmap_pgd_next</span><span class=p>,</span> <span class=n>PGDIR_SIZE</span><span class=p>,</span> <span class=n>PAGE_TABLE</span><span class=p>);</span>
+</code></pre></div><h3 id=pgtableh>pgtable.h</h3><p>わからないので、まずはヘッダーファイルから読んでいく。
 ページング関連で主要なのヘッダーファイルは<code>arch/riscv/include/asm/pgtable.h</code>っぽい。
-<code>arch/riscv/include/asm/pgtable.h</code></p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
-<span class="c">#ifdef CONFIG_64BIT
-</span><span class="c">#include &lt;asm/pgtable-64.h&gt;
-</span><span class="c">#else
-</span><span class="c">#include &lt;asm/pgtable-32.h&gt;
-</span><span class="c">#endif /* CONFIG_64BIT */
-</span><span class="c"></span><span class="na">...</span>
-</code></pre></div><h3 id="pgtable-32h">pgtable-32.h</h3>
-<p>RV32の場合は<code>arch/riscv/include/asm/pgtable-32.h</code>も関連してくる。
+<code>arch/riscv/include/asm/pgtable.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=na>...</span>
+<span class=c>#ifdef CONFIG_64BIT
+</span><span class=c>#include &lt;asm/pgtable-64.h&gt;
+</span><span class=c>#else
+</span><span class=c>#include &lt;asm/pgtable-32.h&gt;
+</span><span class=c>#endif /* CONFIG_64BIT */
+</span><span class=c></span><span class=na>...</span>
+</code></pre></div><h3 id=pgtable-32h>pgtable-32.h</h3><p>RV32の場合は<code>arch/riscv/include/asm/pgtable-32.h</code>も関連してくる。
 まずは、こちらから読んでいく。
-<code>arch/riscv/include/asm/pgtable-32.h</code></p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="c">#include &lt;asm-generic/pgtable-nopmd.h&gt;
-</span><span class="c">#include &lt;linux/const.h&gt;
-</span><span class="c"></span>
-<span class="err">/*</span> <span class="nf">Size</span> <span class="no">of</span> <span class="no">region</span> <span class="no">mapped</span> <span class="no">by</span> <span class="no">a</span> <span class="no">page</span> <span class="no">global</span> <span class="no">directory</span> <span class="p">*</span><span class="err">/</span>
-<span class="c">#define PGDIR_SHIFT     22
-</span><span class="c">#define PGDIR_SIZE      (_AC(1, UL) &lt;&lt; PGDIR_SHIFT)
-</span><span class="c">#define PGDIR_MASK      (~(PGDIR_SIZE - 1))
+<code>arch/riscv/include/asm/pgtable-32.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c>#include &lt;asm-generic/pgtable-nopmd.h&gt;
+</span><span class=c>#include &lt;linux/const.h&gt;
+</span><span class=c></span>
+<span class=err>/*</span> <span class=nf>Size</span> <span class=no>of</span> <span class=no>region</span> <span class=no>mapped</span> <span class=no>by</span> <span class=no>a</span> <span class=no>page</span> <span class=no>global</span> <span class=no>directory</span> <span class=p>*</span><span class=err>/</span>
+<span class=c>#define PGDIR_SHIFT     22
+</span><span class=c>#define PGDIR_SIZE      (_AC(1, UL) &lt;&lt; PGDIR_SHIFT)
+</span><span class=c>#define PGDIR_MASK      (~(PGDIR_SIZE - 1))
 </span></code></pre></div><p><code>PGDIR_SIZE</code>は<code>0x400000</code>となる。
-<code>PGDIR_MASK</code>は<code>0xffc00000</code>となる。</p>
-<h3 id="linux-5-level-paging">Linux 5-Level Paging</h3>
-<p>Linuxでは、仮想アドレスを5つに分けて物理アドレスにマッピングする。
+<code>PGDIR_MASK</code>は<code>0xffc00000</code>となる。</p><h3 id=linux-5-level-paging>Linux 5-Level Paging</h3><p>Linuxでは、仮想アドレスを5つに分けて物理アドレスにマッピングする。
 一部のx86_64プロセッサではサポートしているようである。
 5-Level Pagingのイメージ図を示す。
-<span class="image-container"><span class="link" ><a href="./image00.png" 
-        target="_blank"><img class="img" src="./image00.png"/></a></span>
-</span>
+<span class=image-container><span class=link><a href=./image00.png target=_blank><img class=img src=./image00.png></a></span></span>
 それぞれ、Page Global Directory(PGD)、Page 4-Level Directory(P4D)、Page Upper Directory(PUD)、PMD(Page Middle Directory)、PTE(Page Table Entry)である。
 また、Physical PageはPage Frame Number(PFN)で一意に求めることができる。
 <code>PAGE_OFFSET</code>が0x1000の場合、
-例えば、0x00000000番地ではPFNは0(page 0)となり、0x00001000番地はPFNは1(page 1)となる。</p>
-<h3 id="risc-vページング">RISC-Vページング</h3>
-<p>RISC-VにおけるLinuxのページングのイメージ図を示す。
+例えば、0x00000000番地ではPFNは0(page 0)となり、0x00001000番地はPFNは1(page 1)となる。</p><h3 id=risc-vページング>RISC-Vページング</h3><p>RISC-VにおけるLinuxのページングのイメージ図を示す。
 PUDはRISC-Vでは、使用しない。
-<code>arch/riscv/include/asm/pgtable.h</code></p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="c">#ifndef __ASSEMBLY__
-</span><span class="c"></span><span class="err">/*</span> <span class="nf">Page</span> <span class="no">Upper</span> <span class="no">Directory</span> <span class="no">not</span> <span class="no">used</span> <span class="no">in</span> <span class="no">RISC-V</span> <span class="p">*</span><span class="err">/</span>
-<span class="c">#include &lt;asm-generic/pgtable-nopud.h&gt;
-</span></code></pre></div><p>また、P4DについてRISC-Vでは使用しない。</p>
-<p><code>include/asm-generic/pgtable-nopud.h</code></p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="c">#ifndef __ASSEMBLY__
-</span><span class="c"></span>
-<span class="c">#include &lt;asm-generic/pgtable-nop4d.h&gt;
-</span><span class="c"></span>
-<span class="c">#define __PAGETABLE_PUD_FOLDED 1
-</span></code></pre></div><p><code>include/asm-generic/pgtable-nop4d.h</code></p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="c">#define __PAGETABLE_P4D_FOLDED 1
-</span></code></pre></div><p><span class="image-container"><span class="link" ><a href="./image01.png" 
-        target="_blank"><img class="img" src="./image01.png"/></a></span>
-</span>
+<code>arch/riscv/include/asm/pgtable.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c>#ifndef __ASSEMBLY__
+</span><span class=c></span><span class=err>/*</span> <span class=nf>Page</span> <span class=no>Upper</span> <span class=no>Directory</span> <span class=no>not</span> <span class=no>used</span> <span class=no>in</span> <span class=no>RISC-V</span> <span class=p>*</span><span class=err>/</span>
+<span class=c>#include &lt;asm-generic/pgtable-nopud.h&gt;
+</span></code></pre></div><p>また、P4DについてRISC-Vでは使用しない。</p><p><code>include/asm-generic/pgtable-nopud.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c>#ifndef __ASSEMBLY__
+</span><span class=c></span>
+<span class=c>#include &lt;asm-generic/pgtable-nop4d.h&gt;
+</span><span class=c></span>
+<span class=c>#define __PAGETABLE_PUD_FOLDED 1
+</span></code></pre></div><p><code>include/asm-generic/pgtable-nop4d.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c>#define __PAGETABLE_P4D_FOLDED 1
+</span></code></pre></div><p><span class=image-container><span class=link><a href=./image01.png target=_blank><img class=img src=./image01.png></a></span></span>
 なお、SV32ページングでは、最大2段ページングが可能である。
-よって、SV32では、PGD -&gt; Page Tableの順で索引する。
-なお、PGD内にLeaf PTE(V&amp;&amp;((R|W|X)&amp;&amp;!(!R|W)))がある場合は、4Mページングとなる。
+よって、SV32では、PGD -> Page Tableの順で索引する。
+なお、PGD内にLeaf PTE(V&&((R|W|X)&&!(!R|W)))がある場合は、4Mページングとなる。
 RISC-Vでは、<code>satp</code>レジスタがPGDの物理アドレス22ビットを保持する(ページウォーク時には左に2回シフト)。
 4Mページングの場合はPGDを一回索引するだけである。(offsetは22bitとなる)
-<span class="image-container"><span class="link" ><a href="./image02.png" 
-        target="_blank"><img class="img" src="./image02.png"/></a></span>
-</span></p>
-<h3 id="sv32ページング">SV32ページング</h3>
-<p><code>arch/riscv/include/asm/pgtable-32.h</code></p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="err">/*</span> <span class="nf">Size</span> <span class="no">of</span> <span class="no">region</span> <span class="no">mapped</span> <span class="no">by</span> <span class="no">a</span> <span class="no">page</span> <span class="no">global</span> <span class="no">directory</span> <span class="p">*</span><span class="err">/</span>
-<span class="c">#define PGDIR_SHIFT     22
-</span><span class="c">#define PGDIR_SIZE      (_AC(1, UL) &lt;&lt; PGDIR_SHIFT)
-</span><span class="c">#define PGDIR_MASK      (~(PGDIR_SIZE - 1))
-</span></code></pre></div><p><code>arch/riscv/include/asm/page.h</code></p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="c">#define PAGE_SHIFT	(12)
-</span><span class="c">#define PAGE_SIZE	(_AC(1, UL) &lt;&lt; PAGE_SHIFT)
-</span><span class="c">#define PAGE_MASK	(~(PAGE_SIZE - 1))
-</span><span class="c"></span><span class="na">...</span>
-<span class="c">#define HPAGE_SHIFT		PMD_SHIFT
-</span><span class="c">#define HPAGE_SIZE		(_AC(1, UL) &lt;&lt; HPAGE_SHIFT)
-</span><span class="c">#define HPAGE_MASK              (~(HPAGE_SIZE - 1))
-</span><span class="c">#define HUGETLB_PAGE_ORDER      (HPAGE_SHIFT - PAGE_SHIFT)
-</span><span class="c"></span><span class="na">...</span>
-<span class="err">/*</span> <span class="nf">Page</span> <span class="no">Global</span> <span class="no">Directory</span> <span class="no">entry</span> <span class="p">*</span><span class="err">/</span>
-<span class="nf">typedef</span> <span class="no">struct</span> <span class="err">{</span>
-	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">pgd</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span> <span class="no">pgd_t</span><span class="c">;
-</span><span class="c"></span>
-<span class="err">/*</span> <span class="nf">Page</span> <span class="no">Table</span> <span class="no">entry</span> <span class="p">*</span><span class="err">/</span>
-<span class="nf">typedef</span> <span class="no">struct</span> <span class="err">{</span>
-	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">pte</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span> <span class="no">pte_t</span><span class="c">;
-</span><span class="c"></span>
-<span class="nf">typedef</span> <span class="no">struct</span> <span class="err">{</span>
-	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">pgprot</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span> <span class="no">pgprot_t</span><span class="c">;
-</span><span class="c"></span>
-<span class="nf">typedef</span> <span class="no">struct</span> <span class="no">page</span> <span class="p">*</span><span class="no">pgtable_t</span><span class="c">;
-</span></code></pre></div><p><code>struct page</code>は<code>include/linux/mm_types.h</code>で定義されている、ページ記述子である。</p>
-<p><code>SHIFT</code>マクロはあるレベルにおいて、マップされる長さを示す。
+<span class=image-container><span class=link><a href=./image02.png target=_blank><img class=img src=./image02.png></a></span></span></p><h3 id=sv32ページング>SV32ページング</h3><p><code>arch/riscv/include/asm/pgtable-32.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=err>/*</span> <span class=nf>Size</span> <span class=no>of</span> <span class=no>region</span> <span class=no>mapped</span> <span class=no>by</span> <span class=no>a</span> <span class=no>page</span> <span class=no>global</span> <span class=no>directory</span> <span class=p>*</span><span class=err>/</span>
+<span class=c>#define PGDIR_SHIFT     22
+</span><span class=c>#define PGDIR_SIZE      (_AC(1, UL) &lt;&lt; PGDIR_SHIFT)
+</span><span class=c>#define PGDIR_MASK      (~(PGDIR_SIZE - 1))
+</span></code></pre></div><p><code>arch/riscv/include/asm/page.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c>#define PAGE_SHIFT	(12)
+</span><span class=c>#define PAGE_SIZE	(_AC(1, UL) &lt;&lt; PAGE_SHIFT)
+</span><span class=c>#define PAGE_MASK	(~(PAGE_SIZE - 1))
+</span><span class=c></span><span class=na>...</span>
+<span class=c>#define HPAGE_SHIFT		PMD_SHIFT
+</span><span class=c>#define HPAGE_SIZE		(_AC(1, UL) &lt;&lt; HPAGE_SHIFT)
+</span><span class=c>#define HPAGE_MASK              (~(HPAGE_SIZE - 1))
+</span><span class=c>#define HUGETLB_PAGE_ORDER      (HPAGE_SHIFT - PAGE_SHIFT)
+</span><span class=c></span><span class=na>...</span>
+<span class=err>/*</span> <span class=nf>Page</span> <span class=no>Global</span> <span class=no>Directory</span> <span class=no>entry</span> <span class=p>*</span><span class=err>/</span>
+<span class=nf>typedef</span> <span class=no>struct</span> <span class=err>{</span>
+	<span class=nf>unsigned</span> <span class=no>long</span> <span class=no>pgd</span><span class=c>;
+</span><span class=c></span><span class=err>}</span> <span class=no>pgd_t</span><span class=c>;
+</span><span class=c></span>
+<span class=err>/*</span> <span class=nf>Page</span> <span class=no>Table</span> <span class=no>entry</span> <span class=p>*</span><span class=err>/</span>
+<span class=nf>typedef</span> <span class=no>struct</span> <span class=err>{</span>
+	<span class=nf>unsigned</span> <span class=no>long</span> <span class=no>pte</span><span class=c>;
+</span><span class=c></span><span class=err>}</span> <span class=no>pte_t</span><span class=c>;
+</span><span class=c></span>
+<span class=nf>typedef</span> <span class=no>struct</span> <span class=err>{</span>
+	<span class=nf>unsigned</span> <span class=no>long</span> <span class=no>pgprot</span><span class=c>;
+</span><span class=c></span><span class=err>}</span> <span class=no>pgprot_t</span><span class=c>;
+</span><span class=c></span>
+<span class=nf>typedef</span> <span class=no>struct</span> <span class=no>page</span> <span class=p>*</span><span class=no>pgtable_t</span><span class=c>;
+</span></code></pre></div><p><code>struct page</code>は<code>include/linux/mm_types.h</code>で定義されている、ページ記述子である。</p><p><code>SHIFT</code>マクロはあるレベルにおいて、マップされる長さを示す。
 例えば、Page Tableであれば、<code>PAGE_SHIFT</code>は12なので、<code>2**12 = 4KB</code>がマッピングの<code>SIZE</code>となる。
-<code>MASK</code>マクロは<code>SHIFT</code>より上位のビットすべてをマスク可能な定数である。例えば、<code>SHIFT</code>が12の場合、<code>0xfffff000</code>となる。</p>
-<p><code>PAGE_</code>マクロは、4KBページング用のマクロであり、<code>HPAGE</code>は4MBページング(Huge Page)である。</p>
-<p>PTEのフラグは<code>pgprot_t</code>構造体に格納する。</p>
-<p><code>pgd_t</code>、<code>pte_t</code>、<code>pgprot_t</code>の値を作るマクロとして、それぞれ<code>pgd_val(val)</code>、<code>pte_val(val)</code>、<code>pgprot_val(val)</code>が用意されている。
-また、キャスト用のマクロとして<code>__pgd(var)</code>、<code>__pte(var)</code>、<code>__pgprot(var)</code>が用意されている。</p>
-<p>PTEのフラグ用のマクロは<code>arch/riscv/include/asm/pgtable-bits.h</code>で定義されている。
-<code>arch/riscv/include/asm/pgtable-bits.h</code></p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="c">#define _PAGE_PRESENT   (1 &lt;&lt; 0)
-</span><span class="c">#define __PAGE_READ      (1 &lt;&lt; 1)    /* Readable */
-</span><span class="c">#define __PAGE_WRITE     (1 &lt;&lt; 2)    /* Writable */
-</span><span class="c">#define __PAGE_EXEC      (1 &lt;&lt; 3)    /* Executable */
-</span><span class="c">#define _PAGE_USER      (1 &lt;&lt; 4)    /* User */
-</span><span class="c">#define _PAGE_GLOBAL    (1 &lt;&lt; 5)    /* Global */
-</span><span class="c">#define _PAGE_ACCESSED  (1 &lt;&lt; 6)    /* Set by hardware on any access */
-</span><span class="c">#define _PAGE_DIRTY     (1 &lt;&lt; 7)    /* Set by hardware on any write */
-</span><span class="c">#define _PAGE_SOFT      (1 &lt;&lt; 8)    /* Reserved for software */
+<code>MASK</code>マクロは<code>SHIFT</code>より上位のビットすべてをマスク可能な定数である。例えば、<code>SHIFT</code>が12の場合、<code>0xfffff000</code>となる。</p><p><code>PAGE_</code>マクロは、4KBページング用のマクロであり、<code>HPAGE</code>は4MBページング(Huge Page)である。</p><p>PTEのフラグは<code>pgprot_t</code>構造体に格納する。</p><p><code>pgd_t</code>、<code>pte_t</code>、<code>pgprot_t</code>の値を作るマクロとして、それぞれ<code>pgd_val(val)</code>、<code>pte_val(val)</code>、<code>pgprot_val(val)</code>が用意されている。
+また、キャスト用のマクロとして<code>__pgd(var)</code>、<code>__pte(var)</code>、<code>__pgprot(var)</code>が用意されている。</p><p>PTEのフラグ用のマクロは<code>arch/riscv/include/asm/pgtable-bits.h</code>で定義されている。
+<code>arch/riscv/include/asm/pgtable-bits.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c>#define _PAGE_PRESENT   (1 &lt;&lt; 0)
+</span><span class=c>#define __PAGE_READ      (1 &lt;&lt; 1)    /* Readable */
+</span><span class=c>#define __PAGE_WRITE     (1 &lt;&lt; 2)    /* Writable */
+</span><span class=c>#define __PAGE_EXEC      (1 &lt;&lt; 3)    /* Executable */
+</span><span class=c>#define _PAGE_USER      (1 &lt;&lt; 4)    /* User */
+</span><span class=c>#define _PAGE_GLOBAL    (1 &lt;&lt; 5)    /* Global */
+</span><span class=c>#define _PAGE_ACCESSED  (1 &lt;&lt; 6)    /* Set by hardware on any access */
+</span><span class=c>#define _PAGE_DIRTY     (1 &lt;&lt; 7)    /* Set by hardware on any write */
+</span><span class=c>#define _PAGE_SOFT      (1 &lt;&lt; 8)    /* Reserved for software */
 </span></code></pre></div><p><code>pgd_offset</code>は<code>mm_struct</code>とアドレスを取り、与えられたアドレスをカバーする<code>pgd</code>を返す。
 <code>pte_offset</code>は<code>pmd</code>とアドレスを取り、与えられたアドレスをカバーする<code>pte</code>を返す。
 <code>pte_none</code>、<code>pgd_none</code>マクロは、与えられたエントリーが存在しない場合は1を返す。
 <code>pte_present</code>、<code>pgd_present</code>マクロは、与えられたエントリーが存在する場合は1を返す。
-<code>pte_clear</code>、<code>pgd_clear</code>マクロは、与えられたエントリーをクリアする。</p>
-<p><code>arch/riscv/include/asm/pgtable.h</code></p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pmd_present</span><span class="p">(</span><span class="no">pmd_t</span> <span class="no">pmd</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="p">(</span><span class="no">pmd_val</span><span class="p">(</span><span class="no">pmd</span><span class="p">)</span> <span class="err">&amp;</span> <span class="p">(</span><span class="no">_PAGE_PRESENT</span> <span class="err">|</span> <span class="no">_PAGE_PROT_NONE</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<code>pte_clear</code>、<code>pgd_clear</code>マクロは、与えられたエントリーをクリアする。</p><p><code>arch/riscv/include/asm/pgtable.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pmd_present</span><span class=p>(</span><span class=no>pmd_t</span> <span class=no>pmd</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=p>(</span><span class=no>pmd_val</span><span class=p>(</span><span class=no>pmd</span><span class=p>)</span> <span class=err>&amp;</span> <span class=p>(</span><span class=no>_PAGE_PRESENT</span> <span class=err>|</span> <span class=no>_PAGE_PROT_NONE</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pmd_none</span><span class="p">(</span><span class="no">pmd_t</span> <span class="no">pmd</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="p">(</span><span class="no">pmd_val</span><span class="p">(</span><span class="no">pmd</span><span class="p">)</span> <span class="err">==</span> <span class="mi">0</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pmd_none</span><span class=p>(</span><span class=no>pmd_t</span> <span class=no>pmd</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=p>(</span><span class=no>pmd_val</span><span class=p>(</span><span class=no>pmd</span><span class=p>)</span> <span class=err>==</span> <span class=mi>0</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pmd_bad</span><span class="p">(</span><span class="no">pmd_t</span> <span class="no">pmd</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="p">!</span><span class="no">pmd_present</span><span class="p">(</span><span class="no">pmd</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pmd_bad</span><span class=p>(</span><span class=no>pmd_t</span> <span class=no>pmd</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=p>!</span><span class=no>pmd_present</span><span class=p>(</span><span class=no>pmd</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="c">#define pmd_leaf	pmd_leaf
-</span><span class="c"></span><span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pmd_leaf</span><span class="p">(</span><span class="no">pmd_t</span> <span class="no">pmd</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pmd_present</span><span class="p">(</span><span class="no">pmd</span><span class="p">)</span> <span class="err">&amp;&amp;</span>
-	       <span class="err">(</span><span class="nf">pmd_val</span><span class="p">(</span><span class="no">pmd</span><span class="p">)</span> <span class="err">&amp;</span> <span class="p">(</span><span class="no">_PAGE_READ</span> <span class="err">|</span> <span class="no">_PAGE_WRITE</span> <span class="err">|</span> <span class="no">_PAGE_EXEC</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=c>#define pmd_leaf	pmd_leaf
+</span><span class=c></span><span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pmd_leaf</span><span class=p>(</span><span class=no>pmd_t</span> <span class=no>pmd</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pmd_present</span><span class=p>(</span><span class=no>pmd</span><span class=p>)</span> <span class=err>&amp;&amp;</span>
+	       <span class=err>(</span><span class=nf>pmd_val</span><span class=p>(</span><span class=no>pmd</span><span class=p>)</span> <span class=err>&amp;</span> <span class=p>(</span><span class=no>_PAGE_READ</span> <span class=err>|</span> <span class=no>_PAGE_WRITE</span> <span class=err>|</span> <span class=no>_PAGE_EXEC</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">void</span> <span class="no">set_pmd</span><span class="p">(</span><span class="no">pmd_t</span> <span class="p">*</span><span class="no">pmdp</span><span class="p">,</span> <span class="no">pmd_t</span> <span class="no">pmd</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="err">*</span><span class="nf">pmdp</span> <span class="err">=</span> <span class="no">pmd</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>void</span> <span class=no>set_pmd</span><span class=p>(</span><span class=no>pmd_t</span> <span class=p>*</span><span class=no>pmdp</span><span class=p>,</span> <span class=no>pmd_t</span> <span class=no>pmd</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=err>*</span><span class=nf>pmdp</span> <span class=err>=</span> <span class=no>pmd</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">void</span> <span class="no">pmd_clear</span><span class="p">(</span><span class="no">pmd_t</span> <span class="p">*</span><span class="no">pmdp</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">set_pmd</span><span class="p">(</span><span class="no">pmdp</span><span class="p">,</span> <span class="no">__pmd</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>void</span> <span class=no>pmd_clear</span><span class=p>(</span><span class=no>pmd_t</span> <span class=p>*</span><span class=no>pmdp</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>set_pmd</span><span class=p>(</span><span class=no>pmdp</span><span class=p>,</span> <span class=no>__pmd</span><span class=p>(</span><span class=mi>0</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pgd_t</span> <span class="no">pfn_pgd</span><span class="p">(</span><span class="no">unsigned</span> <span class="no">long</span> <span class="no">pfn</span><span class="p">,</span> <span class="no">pgprot_t</span> <span class="no">prot</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pgd</span><span class="p">((</span><span class="no">pfn</span> <span class="err">&lt;&lt;</span> <span class="no">_PAGE_PFN_SHIFT</span><span class="p">)</span> <span class="err">|</span> <span class="no">pgprot_val</span><span class="p">(</span><span class="no">prot</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pgd_t</span> <span class=no>pfn_pgd</span><span class=p>(</span><span class=no>unsigned</span> <span class=no>long</span> <span class=no>pfn</span><span class=p>,</span> <span class=no>pgprot_t</span> <span class=no>prot</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pgd</span><span class=p>((</span><span class=no>pfn</span> <span class=err>&lt;&lt;</span> <span class=no>_PAGE_PFN_SHIFT</span><span class=p>)</span> <span class=err>|</span> <span class=no>pgprot_val</span><span class=p>(</span><span class=no>prot</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">unsigned</span> <span class="no">long</span> <span class="no">_pgd_pfn</span><span class="p">(</span><span class="no">pgd_t</span> <span class="no">pgd</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pgd_val</span><span class="p">(</span><span class="no">pgd</span><span class="p">)</span> <span class="err">&gt;&gt;</span> <span class="no">_PAGE_PFN_SHIFT</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>unsigned</span> <span class=no>long</span> <span class=no>_pgd_pfn</span><span class=p>(</span><span class=no>pgd_t</span> <span class=no>pgd</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pgd_val</span><span class=p>(</span><span class=no>pgd</span><span class=p>)</span> <span class=err>&gt;&gt;</span> <span class=no>_PAGE_PFN_SHIFT</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">struct</span> <span class="no">page</span> <span class="p">*</span><span class="no">pmd_page</span><span class="p">(</span><span class="no">pmd_t</span> <span class="no">pmd</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pfn_to_page</span><span class="p">(</span><span class="no">pmd_val</span><span class="p">(</span><span class="no">pmd</span><span class="p">)</span> <span class="err">&gt;&gt;</span> <span class="no">_PAGE_PFN_SHIFT</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>struct</span> <span class=no>page</span> <span class=p>*</span><span class=no>pmd_page</span><span class=p>(</span><span class=no>pmd_t</span> <span class=no>pmd</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pfn_to_page</span><span class=p>(</span><span class=no>pmd_val</span><span class=p>(</span><span class=no>pmd</span><span class=p>)</span> <span class=err>&gt;&gt;</span> <span class=no>_PAGE_PFN_SHIFT</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">unsigned</span> <span class="no">long</span> <span class="no">pmd_page_vaddr</span><span class="p">(</span><span class="no">pmd_t</span> <span class="no">pmd</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="p">(</span><span class="no">unsigned</span> <span class="no">long</span><span class="p">)</span><span class="no">pfn_to_virt</span><span class="p">(</span><span class="no">pmd_val</span><span class="p">(</span><span class="no">pmd</span><span class="p">)</span> <span class="err">&gt;&gt;</span> <span class="no">_PAGE_PFN_SHIFT</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>unsigned</span> <span class=no>long</span> <span class=no>pmd_page_vaddr</span><span class=p>(</span><span class=no>pmd_t</span> <span class=no>pmd</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=p>(</span><span class=no>unsigned</span> <span class=no>long</span><span class=p>)</span><span class=no>pfn_to_virt</span><span class=p>(</span><span class=no>pmd_val</span><span class=p>(</span><span class=no>pmd</span><span class=p>)</span> <span class=err>&gt;&gt;</span> <span class=no>_PAGE_PFN_SHIFT</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="err">/*</span> <span class="nf">Yields</span> <span class="no">the</span> <span class="no">page</span> <span class="no">frame</span> <span class="no">number</span> <span class="p">(</span><span class="no">PFN</span><span class="p">)</span> <span class="no">of</span> <span class="no">a</span> <span class="no">page</span> <span class="no">table</span> <span class="no">entry</span> <span class="p">*</span><span class="err">/</span>
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">unsigned</span> <span class="no">long</span> <span class="no">pte_pfn</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&gt;&gt;</span> <span class="no">_PAGE_PFN_SHIFT</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=err>/*</span> <span class=nf>Yields</span> <span class=no>the</span> <span class=no>page</span> <span class=no>frame</span> <span class=no>number</span> <span class=p>(</span><span class=no>PFN</span><span class=p>)</span> <span class=no>of</span> <span class=no>a</span> <span class=no>page</span> <span class=no>table</span> <span class=no>entry</span> <span class=p>*</span><span class=err>/</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>unsigned</span> <span class=no>long</span> <span class=no>pte_pfn</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&gt;&gt;</span> <span class=no>_PAGE_PFN_SHIFT</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="c">#define pte_page(x)     pfn_to_page(pte_pfn(x))
-</span><span class="c"></span>
-<span class="err">/*</span> <span class="nf">Constructs</span> <span class="no">a</span> <span class="no">page</span> <span class="no">table</span> <span class="no">entry</span> <span class="p">*</span><span class="err">/</span>
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pfn_pte</span><span class="p">(</span><span class="no">unsigned</span> <span class="no">long</span> <span class="no">pfn</span><span class="p">,</span> <span class="no">pgprot_t</span> <span class="no">prot</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pte</span><span class="p">((</span><span class="no">pfn</span> <span class="err">&lt;&lt;</span> <span class="no">_PAGE_PFN_SHIFT</span><span class="p">)</span> <span class="err">|</span> <span class="no">pgprot_val</span><span class="p">(</span><span class="no">prot</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=c>#define pte_page(x)     pfn_to_page(pte_pfn(x))
+</span><span class=c></span>
+<span class=err>/*</span> <span class=nf>Constructs</span> <span class=no>a</span> <span class=no>page</span> <span class=no>table</span> <span class=no>entry</span> <span class=p>*</span><span class=err>/</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pfn_pte</span><span class=p>(</span><span class=no>unsigned</span> <span class=no>long</span> <span class=no>pfn</span><span class=p>,</span> <span class=no>pgprot_t</span> <span class=no>prot</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pte</span><span class=p>((</span><span class=no>pfn</span> <span class=err>&lt;&lt;</span> <span class=no>_PAGE_PFN_SHIFT</span><span class=p>)</span> <span class=err>|</span> <span class=no>pgprot_val</span><span class=p>(</span><span class=no>prot</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="c">#define mk_pte(page, prot)       pfn_pte(page_to_pfn(page), prot)
-</span><span class="c"></span>
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pte_present</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="p">(</span><span class="no">_PAGE_PRESENT</span> <span class="err">|</span> <span class="no">_PAGE_PROT_NONE</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=c>#define mk_pte(page, prot)       pfn_pte(page_to_pfn(page), prot)
+</span><span class=c></span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pte_present</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=p>(</span><span class=no>_PAGE_PRESENT</span> <span class=err>|</span> <span class=no>_PAGE_PROT_NONE</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pte_none</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">==</span> <span class="mi">0</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pte_none</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>==</span> <span class=mi>0</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pte_write</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="no">_PAGE_WRITE</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pte_write</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=no>_PAGE_WRITE</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pte_exec</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="no">_PAGE_EXEC</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pte_exec</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=no>_PAGE_EXEC</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pte_huge</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pte_present</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span>
-		<span class="err">&amp;&amp;</span> <span class="err">(</span><span class="nf">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="p">(</span><span class="no">_PAGE_READ</span> <span class="err">|</span> <span class="no">_PAGE_WRITE</span> <span class="err">|</span> <span class="no">_PAGE_EXEC</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pte_huge</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pte_present</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span>
+		<span class=err>&amp;&amp;</span> <span class=err>(</span><span class=nf>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=p>(</span><span class=no>_PAGE_READ</span> <span class=err>|</span> <span class=no>_PAGE_WRITE</span> <span class=err>|</span> <span class=no>_PAGE_EXEC</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pte_dirty</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="no">_PAGE_DIRTY</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pte_dirty</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=no>_PAGE_DIRTY</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pte_young</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="no">_PAGE_ACCESSED</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pte_young</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=no>_PAGE_ACCESSED</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pte_special</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="no">_PAGE_SPECIAL</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pte_special</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=no>_PAGE_SPECIAL</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="err">/*</span> <span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_rdprotect</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
+<span class=err>/*</span> <span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_rdprotect</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_wrprotect</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pte</span><span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="err">~</span><span class="p">(</span><span class="no">_PAGE_WRITE</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_wrprotect</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pte</span><span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=err>~</span><span class=p>(</span><span class=no>_PAGE_WRITE</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="err">/*</span> <span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_mkread</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
+<span class=err>/*</span> <span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_mkread</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_mkwrite</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pte</span><span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">|</span> <span class="no">_PAGE_WRITE</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_mkwrite</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pte</span><span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>|</span> <span class=no>_PAGE_WRITE</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="err">/*</span> <span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_mkexec</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
+<span class=err>/*</span> <span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_mkexec</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_mkdirty</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span> <span class="nf">return</span> <span class="no">__pte</span><span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">|</span> <span class="no">_PAGE_DIRTY</span><span class="p">)</span><span class="c">; } 
-</span><span class="c"></span><span class="no">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_mkclean</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pte</span><span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="err">~</span><span class="p">(</span><span class="no">_PAGE_DIRTY</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_mkdirty</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span> <span class=nf>return</span> <span class=no>__pte</span><span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>|</span> <span class=no>_PAGE_DIRTY</span><span class=p>)</span><span class=c>; } 
+</span><span class=c></span><span class=no>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_mkclean</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pte</span><span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=err>~</span><span class=p>(</span><span class=no>_PAGE_DIRTY</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_mkyoung</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pte</span><span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">|</span> <span class="no">_PAGE_ACCESSED</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_mkyoung</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pte</span><span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>|</span> <span class=no>_PAGE_ACCESSED</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_mkold</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pte</span><span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="err">~</span><span class="p">(</span><span class="no">_PAGE_ACCESSED</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_mkold</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pte</span><span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=err>~</span><span class=p>(</span><span class=no>_PAGE_ACCESSED</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_mkspecial</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pte</span><span class="p">(</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">|</span> <span class="no">_PAGE_SPECIAL</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_mkspecial</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pte</span><span class=p>(</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>|</span> <span class=no>_PAGE_SPECIAL</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_mkhuge</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pte</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_mkhuge</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pte</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="err">/*</span> <span class="nf">Modify</span> <span class="no">page</span> <span class="no">protection</span> <span class="no">bits</span> <span class="p">*</span><span class="err">/</span>
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">pte_modify</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">,</span> <span class="no">pgprot_t</span> <span class="no">newprot</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pte</span><span class="p">((</span><span class="no">pte_val</span><span class="p">(</span><span class="no">pte</span><span class="p">)</span> <span class="err">&amp;</span> <span class="no">_PAGE_CHG_MASK</span><span class="p">)</span> <span class="err">|</span> <span class="no">pgprot_val</span><span class="p">(</span><span class="no">newprot</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
-<span class="c">#define pgd_ERROR(e) \
-</span><span class="c"></span>	<span class="nf">pr_err</span><span class="p">(</span><span class="err">&#34;</span><span class="nv">%s</span><span class="p">:</span><span class="nv">%d</span><span class="p">:</span> <span class="no">bad</span> <span class="no">pgd</span> <span class="err">&#34;</span> <span class="no">PTE_FMT</span> <span class="err">&#34;</span><span class="p">.</span><span class="err">\</span><span class="no">n</span><span class="err">&#34;</span><span class="p">,</span> <span class="no">__FILE__</span><span class="p">,</span> <span class="no">__LINE__</span><span class="p">,</span> <span class="no">pgd_val</span><span class="p">(</span><span class="no">e</span><span class="p">))</span>
+<span class=err>/*</span> <span class=nf>Modify</span> <span class=no>page</span> <span class=no>protection</span> <span class=no>bits</span> <span class=p>*</span><span class=err>/</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>pte_modify</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>,</span> <span class=no>pgprot_t</span> <span class=no>newprot</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pte</span><span class=p>((</span><span class=no>pte_val</span><span class=p>(</span><span class=no>pte</span><span class=p>)</span> <span class=err>&amp;</span> <span class=no>_PAGE_CHG_MASK</span><span class=p>)</span> <span class=err>|</span> <span class=no>pgprot_val</span><span class=p>(</span><span class=no>newprot</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
+<span class=c>#define pgd_ERROR(e) \
+</span><span class=c></span>	<span class=nf>pr_err</span><span class=p>(</span><span class=err>&#34;</span><span class=nv>%s</span><span class=p>:</span><span class=nv>%d</span><span class=p>:</span> <span class=no>bad</span> <span class=no>pgd</span> <span class=err>&#34;</span> <span class=no>PTE_FMT</span> <span class=err>&#34;</span><span class=p>.</span><span class=err>\</span><span class=no>n</span><span class=err>&#34;</span><span class=p>,</span> <span class=no>__FILE__</span><span class=p>,</span> <span class=no>__LINE__</span><span class=p>,</span> <span class=no>pgd_val</span><span class=p>(</span><span class=no>e</span><span class=p>))</span>
 
 
-<span class="err">/*</span> <span class="nf">Commit</span> <span class="no">new</span> <span class="no">configuration</span> <span class="no">to</span> <span class="no">MMU</span> <span class="no">hardware</span> <span class="p">*</span><span class="err">/</span>
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">void</span> <span class="no">update_mmu_cache</span><span class="p">(</span><span class="no">struct</span> <span class="no">vm_area_struct</span> <span class="p">*</span><span class="no">vma</span><span class="p">,</span>
-	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">address</span><span class="p">,</span> <span class="no">pte_t</span> <span class="p">*</span><span class="no">ptep</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="err">/*</span>
-	 <span class="err">*</span> <span class="nf">The</span> <span class="no">kernel</span> <span class="no">assumes</span> <span class="no">that</span> <span class="no">TLBs</span> <span class="no">don</span><span class="err">&#39;</span><span class="no">t</span> <span class="no">cache</span> <span class="no">invalid</span> <span class="no">entries</span><span class="p">,</span> <span class="no">but</span>
-	 <span class="err">*</span> <span class="nf">in</span> <span class="no">RISC-V</span><span class="p">,</span> <span class="no">SFENCE.VMA</span> <span class="no">specifies</span> <span class="no">an</span> <span class="no">ordering</span> <span class="no">constraint</span><span class="p">,</span> <span class="no">not</span> <span class="no">a</span>
-	 <span class="err">*</span> <span class="nf">cache</span> <span class="no">flush</span><span class="c">; it is necessary even after writing invalid entries.
-</span><span class="c"></span>	 <span class="p">*</span> <span class="no">Relying</span> <span class="no">on</span> <span class="no">flush_tlb_fix_spurious_fault</span> <span class="no">would</span> <span class="no">suffice</span><span class="p">,</span> <span class="no">but</span>
-	 <span class="err">*</span> <span class="nf">the</span> <span class="no">extra</span> <span class="no">traps</span> <span class="no">reduce</span> <span class="no">performance.</span>  <span class="no">So</span><span class="p">,</span> <span class="no">eagerly</span> <span class="no">SFENCE.VMA.</span>
-	 <span class="err">*/</span>
-	<span class="nf">local_flush_tlb_page</span><span class="p">(</span><span class="no">address</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=err>/*</span> <span class=nf>Commit</span> <span class=no>new</span> <span class=no>configuration</span> <span class=no>to</span> <span class=no>MMU</span> <span class=no>hardware</span> <span class=p>*</span><span class=err>/</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>void</span> <span class=no>update_mmu_cache</span><span class=p>(</span><span class=no>struct</span> <span class=no>vm_area_struct</span> <span class=p>*</span><span class=no>vma</span><span class=p>,</span>
+	<span class=nf>unsigned</span> <span class=no>long</span> <span class=no>address</span><span class=p>,</span> <span class=no>pte_t</span> <span class=p>*</span><span class=no>ptep</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=err>/*</span>
+	 <span class=err>*</span> <span class=nf>The</span> <span class=no>kernel</span> <span class=no>assumes</span> <span class=no>that</span> <span class=no>TLBs</span> <span class=no>don</span><span class=err>&#39;</span><span class=no>t</span> <span class=no>cache</span> <span class=no>invalid</span> <span class=no>entries</span><span class=p>,</span> <span class=no>but</span>
+	 <span class=err>*</span> <span class=nf>in</span> <span class=no>RISC-V</span><span class=p>,</span> <span class=no>SFENCE.VMA</span> <span class=no>specifies</span> <span class=no>an</span> <span class=no>ordering</span> <span class=no>constraint</span><span class=p>,</span> <span class=no>not</span> <span class=no>a</span>
+	 <span class=err>*</span> <span class=nf>cache</span> <span class=no>flush</span><span class=c>; it is necessary even after writing invalid entries.
+</span><span class=c></span>	 <span class=p>*</span> <span class=no>Relying</span> <span class=no>on</span> <span class=no>flush_tlb_fix_spurious_fault</span> <span class=no>would</span> <span class=no>suffice</span><span class=p>,</span> <span class=no>but</span>
+	 <span class=err>*</span> <span class=nf>the</span> <span class=no>extra</span> <span class=no>traps</span> <span class=no>reduce</span> <span class=no>performance.</span>  <span class=no>So</span><span class=p>,</span> <span class=no>eagerly</span> <span class=no>SFENCE.VMA.</span>
+	 <span class=err>*/</span>
+	<span class=nf>local_flush_tlb_page</span><span class=p>(</span><span class=no>address</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="c">#define __HAVE_ARCH_PTE_SAME
-</span><span class="c"></span><span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">pte_same</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte_a</span><span class="p">,</span> <span class="no">pte_t</span> <span class="no">pte_b</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">pte_val</span><span class="p">(</span><span class="no">pte_a</span><span class="p">)</span> <span class="err">==</span> <span class="no">pte_val</span><span class="p">(</span><span class="no">pte_b</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=c>#define __HAVE_ARCH_PTE_SAME
+</span><span class=c></span><span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>pte_same</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte_a</span><span class=p>,</span> <span class=no>pte_t</span> <span class=no>pte_b</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>pte_val</span><span class=p>(</span><span class=no>pte_a</span><span class=p>)</span> <span class=err>==</span> <span class=no>pte_val</span><span class=p>(</span><span class=no>pte_b</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="err">/*</span>
- <span class="err">*</span> <span class="nf">Certain</span> <span class="no">architectures</span> <span class="no">need</span> <span class="no">to</span> <span class="no">do</span> <span class="no">special</span> <span class="no">things</span> <span class="no">when</span> <span class="no">PTEs</span> <span class="no">within</span>
- <span class="err">*</span> <span class="nf">a</span> <span class="no">page</span> <span class="no">table</span> <span class="no">are</span> <span class="no">directly</span> <span class="no">modified.</span>  <span class="no">Thus</span><span class="p">,</span> <span class="no">the</span> <span class="no">following</span> <span class="no">hook</span> <span class="no">is</span>
- <span class="err">*</span> <span class="nf">made</span> <span class="no">available.</span>
- <span class="err">*/</span>
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">void</span> <span class="no">set_pte</span><span class="p">(</span><span class="no">pte_t</span> <span class="p">*</span><span class="no">ptep</span><span class="p">,</span> <span class="no">pte_t</span> <span class="no">pteval</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="err">*</span><span class="nf">ptep</span> <span class="err">=</span> <span class="no">pteval</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=err>/*</span>
+ <span class=err>*</span> <span class=nf>Certain</span> <span class=no>architectures</span> <span class=no>need</span> <span class=no>to</span> <span class=no>do</span> <span class=no>special</span> <span class=no>things</span> <span class=no>when</span> <span class=no>PTEs</span> <span class=no>within</span>
+ <span class=err>*</span> <span class=nf>a</span> <span class=no>page</span> <span class=no>table</span> <span class=no>are</span> <span class=no>directly</span> <span class=no>modified.</span>  <span class=no>Thus</span><span class=p>,</span> <span class=no>the</span> <span class=no>following</span> <span class=no>hook</span> <span class=no>is</span>
+ <span class=err>*</span> <span class=nf>made</span> <span class=no>available.</span>
+ <span class=err>*/</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>void</span> <span class=no>set_pte</span><span class=p>(</span><span class=no>pte_t</span> <span class=p>*</span><span class=no>ptep</span><span class=p>,</span> <span class=no>pte_t</span> <span class=no>pteval</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=err>*</span><span class=nf>ptep</span> <span class=err>=</span> <span class=no>pteval</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">void</span> <span class="no">flush_icache_pte</span><span class="p">(</span><span class="no">pte_t</span> <span class="no">pte</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">void</span> <span class="no">set_pte_at</span><span class="p">(</span><span class="no">struct</span> <span class="no">mm_struct</span> <span class="p">*</span><span class="no">mm</span><span class="p">,</span>
-	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">addr</span><span class="p">,</span> <span class="no">pte_t</span> <span class="p">*</span><span class="no">ptep</span><span class="p">,</span> <span class="no">pte_t</span> <span class="no">pteval</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">if</span> <span class="p">(</span><span class="no">pte_present</span><span class="p">(</span><span class="no">pteval</span><span class="p">)</span> <span class="err">&amp;&amp;</span> <span class="no">pte_exec</span><span class="p">(</span><span class="no">pteval</span><span class="p">))</span>
-		<span class="nf">flush_icache_pte</span><span class="p">(</span><span class="no">pteval</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>
-	<span class="nf">set_pte</span><span class="p">(</span><span class="no">ptep</span><span class="p">,</span> <span class="no">pteval</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>void</span> <span class=no>flush_icache_pte</span><span class=p>(</span><span class=no>pte_t</span> <span class=no>pte</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>void</span> <span class=no>set_pte_at</span><span class=p>(</span><span class=no>struct</span> <span class=no>mm_struct</span> <span class=p>*</span><span class=no>mm</span><span class=p>,</span>
+	<span class=nf>unsigned</span> <span class=no>long</span> <span class=no>addr</span><span class=p>,</span> <span class=no>pte_t</span> <span class=p>*</span><span class=no>ptep</span><span class=p>,</span> <span class=no>pte_t</span> <span class=no>pteval</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>if</span> <span class=p>(</span><span class=no>pte_present</span><span class=p>(</span><span class=no>pteval</span><span class=p>)</span> <span class=err>&amp;&amp;</span> <span class=no>pte_exec</span><span class=p>(</span><span class=no>pteval</span><span class=p>))</span>
+		<span class=nf>flush_icache_pte</span><span class=p>(</span><span class=no>pteval</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>
+	<span class=nf>set_pte</span><span class=p>(</span><span class=no>ptep</span><span class=p>,</span> <span class=no>pteval</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="nf">static</span> <span class="no">inline</span> <span class="no">void</span> <span class="no">pte_clear</span><span class="p">(</span><span class="no">struct</span> <span class="no">mm_struct</span> <span class="p">*</span><span class="no">mm</span><span class="p">,</span>
-	<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">addr</span><span class="p">,</span> <span class="no">pte_t</span> <span class="p">*</span><span class="no">ptep</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">set_pte_at</span><span class="p">(</span><span class="no">mm</span><span class="p">,</span> <span class="no">addr</span><span class="p">,</span> <span class="no">ptep</span><span class="p">,</span> <span class="no">__pte</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=nf>static</span> <span class=no>inline</span> <span class=no>void</span> <span class=no>pte_clear</span><span class=p>(</span><span class=no>struct</span> <span class=no>mm_struct</span> <span class=p>*</span><span class=no>mm</span><span class=p>,</span>
+	<span class=nf>unsigned</span> <span class=no>long</span> <span class=no>addr</span><span class=p>,</span> <span class=no>pte_t</span> <span class=p>*</span><span class=no>ptep</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>set_pte_at</span><span class=p>(</span><span class=no>mm</span><span class=p>,</span> <span class=no>addr</span><span class=p>,</span> <span class=no>ptep</span><span class=p>,</span> <span class=no>__pte</span><span class=p>(</span><span class=mi>0</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="c">#define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
-</span><span class="c"></span><span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">ptep_set_access_flags</span><span class="p">(</span><span class="no">struct</span> <span class="no">vm_area_struct</span> <span class="p">*</span><span class="no">vma</span><span class="p">,</span>
-					<span class="nf">unsigned</span> <span class="no">long</span> <span class="no">address</span><span class="p">,</span> <span class="no">pte_t</span> <span class="p">*</span><span class="no">ptep</span><span class="p">,</span>
-					<span class="nf">pte_t</span> <span class="no">entry</span><span class="p">,</span> <span class="no">int</span> <span class="no">dirty</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">if</span> <span class="p">(!</span><span class="no">pte_same</span><span class="p">(*</span><span class="no">ptep</span><span class="p">,</span> <span class="no">entry</span><span class="p">))</span>
-		<span class="nf">set_pte_at</span><span class="p">(</span><span class="no">vma-</span><span class="err">&gt;</span><span class="no">vm_mm</span><span class="p">,</span> <span class="no">address</span><span class="p">,</span> <span class="no">ptep</span><span class="p">,</span> <span class="no">entry</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>	<span class="err">/</span><span class="p">*</span>
-	 <span class="err">*</span> <span class="nf">update_mmu_cache</span> <span class="no">will</span> <span class="no">unconditionally</span> <span class="no">execute</span><span class="p">,</span> <span class="no">handling</span> <span class="no">both</span>
-	 <span class="err">*</span> <span class="nf">the</span> <span class="no">case</span> <span class="no">that</span> <span class="no">the</span> <span class="no">PTE</span> <span class="no">changed</span> <span class="no">and</span> <span class="no">the</span> <span class="no">spurious</span> <span class="no">fault</span> <span class="no">case.</span>
-	 <span class="err">*/</span>
-	<span class="nf">return</span> <span class="no">true</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=c>#define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
+</span><span class=c></span><span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>ptep_set_access_flags</span><span class=p>(</span><span class=no>struct</span> <span class=no>vm_area_struct</span> <span class=p>*</span><span class=no>vma</span><span class=p>,</span>
+					<span class=nf>unsigned</span> <span class=no>long</span> <span class=no>address</span><span class=p>,</span> <span class=no>pte_t</span> <span class=p>*</span><span class=no>ptep</span><span class=p>,</span>
+					<span class=nf>pte_t</span> <span class=no>entry</span><span class=p>,</span> <span class=no>int</span> <span class=no>dirty</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>if</span> <span class=p>(!</span><span class=no>pte_same</span><span class=p>(*</span><span class=no>ptep</span><span class=p>,</span> <span class=no>entry</span><span class=p>))</span>
+		<span class=nf>set_pte_at</span><span class=p>(</span><span class=no>vma-</span><span class=err>&gt;</span><span class=no>vm_mm</span><span class=p>,</span> <span class=no>address</span><span class=p>,</span> <span class=no>ptep</span><span class=p>,</span> <span class=no>entry</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>	<span class=err>/</span><span class=p>*</span>
+	 <span class=err>*</span> <span class=nf>update_mmu_cache</span> <span class=no>will</span> <span class=no>unconditionally</span> <span class=no>execute</span><span class=p>,</span> <span class=no>handling</span> <span class=no>both</span>
+	 <span class=err>*</span> <span class=nf>the</span> <span class=no>case</span> <span class=no>that</span> <span class=no>the</span> <span class=no>PTE</span> <span class=no>changed</span> <span class=no>and</span> <span class=no>the</span> <span class=no>spurious</span> <span class=no>fault</span> <span class=no>case.</span>
+	 <span class=err>*/</span>
+	<span class=nf>return</span> <span class=no>true</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="c">#define __HAVE_ARCH_PTEP_GET_AND_CLEAR
-</span><span class="c"></span><span class="nf">static</span> <span class="no">inline</span> <span class="no">pte_t</span> <span class="no">ptep_get_and_clear</span><span class="p">(</span><span class="no">struct</span> <span class="no">mm_struct</span> <span class="p">*</span><span class="no">mm</span><span class="p">,</span>
-				       <span class="nf">unsigned</span> <span class="no">long</span> <span class="no">address</span><span class="p">,</span> <span class="no">pte_t</span> <span class="p">*</span><span class="no">ptep</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">return</span> <span class="no">__pte</span><span class="p">(</span><span class="no">atomic_long_xchg</span><span class="p">((</span><span class="no">atomic_long_t</span> <span class="p">*)</span><span class="no">ptep</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=c>#define __HAVE_ARCH_PTEP_GET_AND_CLEAR
+</span><span class=c></span><span class=nf>static</span> <span class=no>inline</span> <span class=no>pte_t</span> <span class=no>ptep_get_and_clear</span><span class=p>(</span><span class=no>struct</span> <span class=no>mm_struct</span> <span class=p>*</span><span class=no>mm</span><span class=p>,</span>
+				       <span class=nf>unsigned</span> <span class=no>long</span> <span class=no>address</span><span class=p>,</span> <span class=no>pte_t</span> <span class=p>*</span><span class=no>ptep</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>return</span> <span class=no>__pte</span><span class=p>(</span><span class=no>atomic_long_xchg</span><span class=p>((</span><span class=no>atomic_long_t</span> <span class=p>*)</span><span class=no>ptep</span><span class=p>,</span> <span class=mi>0</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="c">#define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
-</span><span class="c"></span><span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">ptep_test_and_clear_young</span><span class="p">(</span><span class="no">struct</span> <span class="no">vm_area_struct</span> <span class="p">*</span><span class="no">vma</span><span class="p">,</span>
-					    <span class="nf">unsigned</span> <span class="no">long</span> <span class="no">address</span><span class="p">,</span>
-					    <span class="nf">pte_t</span> <span class="p">*</span><span class="no">ptep</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">if</span> <span class="p">(!</span><span class="no">pte_young</span><span class="p">(*</span><span class="no">ptep</span><span class="p">))</span>
-		<span class="nf">return</span> <span class="mi">0</span><span class="c">;
-</span><span class="c"></span>	<span class="no">return</span> <span class="no">test_and_clear_bit</span><span class="p">(</span><span class="no">_PAGE_ACCESSED_OFFSET</span><span class="p">,</span> <span class="err">&amp;</span><span class="no">pte_val</span><span class="p">(*</span><span class="no">ptep</span><span class="p">))</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=c>#define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
+</span><span class=c></span><span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>ptep_test_and_clear_young</span><span class=p>(</span><span class=no>struct</span> <span class=no>vm_area_struct</span> <span class=p>*</span><span class=no>vma</span><span class=p>,</span>
+					    <span class=nf>unsigned</span> <span class=no>long</span> <span class=no>address</span><span class=p>,</span>
+					    <span class=nf>pte_t</span> <span class=p>*</span><span class=no>ptep</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>if</span> <span class=p>(!</span><span class=no>pte_young</span><span class=p>(*</span><span class=no>ptep</span><span class=p>))</span>
+		<span class=nf>return</span> <span class=mi>0</span><span class=c>;
+</span><span class=c></span>	<span class=no>return</span> <span class=no>test_and_clear_bit</span><span class=p>(</span><span class=no>_PAGE_ACCESSED_OFFSET</span><span class=p>,</span> <span class=err>&amp;</span><span class=no>pte_val</span><span class=p>(*</span><span class=no>ptep</span><span class=p>))</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="c">#define __HAVE_ARCH_PTEP_SET_WRPROTECT
-</span><span class="c"></span><span class="nf">static</span> <span class="no">inline</span> <span class="no">void</span> <span class="no">ptep_set_wrprotect</span><span class="p">(</span><span class="no">struct</span> <span class="no">mm_struct</span> <span class="p">*</span><span class="no">mm</span><span class="p">,</span>
-				      <span class="nf">unsigned</span> <span class="no">long</span> <span class="no">address</span><span class="p">,</span> <span class="no">pte_t</span> <span class="p">*</span><span class="no">ptep</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="nf">atomic_long_and</span><span class="p">(</span><span class="err">~</span><span class="p">(</span><span class="no">unsigned</span> <span class="no">long</span><span class="p">)</span><span class="no">_PAGE_WRITE</span><span class="p">,</span> <span class="p">(</span><span class="no">atomic_long_t</span> <span class="p">*)</span><span class="no">ptep</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=c>#define __HAVE_ARCH_PTEP_SET_WRPROTECT
+</span><span class=c></span><span class=nf>static</span> <span class=no>inline</span> <span class=no>void</span> <span class=no>ptep_set_wrprotect</span><span class=p>(</span><span class=no>struct</span> <span class=no>mm_struct</span> <span class=p>*</span><span class=no>mm</span><span class=p>,</span>
+				      <span class=nf>unsigned</span> <span class=no>long</span> <span class=no>address</span><span class=p>,</span> <span class=no>pte_t</span> <span class=p>*</span><span class=no>ptep</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=nf>atomic_long_and</span><span class=p>(</span><span class=err>~</span><span class=p>(</span><span class=no>unsigned</span> <span class=no>long</span><span class=p>)</span><span class=no>_PAGE_WRITE</span><span class=p>,</span> <span class=p>(</span><span class=no>atomic_long_t</span> <span class=p>*)</span><span class=no>ptep</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 
-<span class="c">#define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-</span><span class="c"></span><span class="nf">static</span> <span class="no">inline</span> <span class="no">int</span> <span class="no">ptep_clear_flush_young</span><span class="p">(</span><span class="no">struct</span> <span class="no">vm_area_struct</span> <span class="p">*</span><span class="no">vma</span><span class="p">,</span>
-					 <span class="nf">unsigned</span> <span class="no">long</span> <span class="no">address</span><span class="p">,</span> <span class="no">pte_t</span> <span class="p">*</span><span class="no">ptep</span><span class="p">)</span>
-<span class="err">{</span>
-	<span class="err">/*</span>
-	 <span class="err">*</span> <span class="nf">This</span> <span class="no">comment</span> <span class="no">is</span> <span class="no">borrowed</span> <span class="no">from</span> <span class="no">x86</span><span class="p">,</span> <span class="no">but</span> <span class="no">applies</span> <span class="no">equally</span> <span class="no">to</span> <span class="no">RISC-V</span><span class="p">:</span>
-	 <span class="err">*</span>
-	 <span class="err">*</span> <span class="nf">Clearing</span> <span class="no">the</span> <span class="no">accessed</span> <span class="no">bit</span> <span class="no">without</span> <span class="no">a</span> <span class="no">TLB</span> <span class="no">flush</span>
-	 <span class="err">*</span> <span class="nf">doesn</span><span class="err">&#39;</span><span class="no">t</span> <span class="no">cause</span> <span class="no">data</span> <span class="no">corruption.</span> <span class="p">[</span> <span class="no">It</span> <span class="no">could</span> <span class="no">cause</span> <span class="no">incorrect</span>
-	 <span class="err">*</span> <span class="nf">page</span> <span class="no">aging</span> <span class="no">and</span> <span class="no">the</span> <span class="p">(</span><span class="no">mistaken</span><span class="p">)</span> <span class="no">reclaim</span> <span class="no">of</span> <span class="no">hot</span> <span class="no">pages</span><span class="p">,</span> <span class="no">but</span> <span class="no">the</span>
-	 <span class="err">*</span> <span class="nf">chance</span> <span class="no">of</span> <span class="no">that</span> <span class="no">should</span> <span class="no">be</span> <span class="no">relatively</span> <span class="no">low.</span> <span class="p">]</span>
-	 <span class="err">*</span>
-	 <span class="err">*</span> <span class="nf">So</span> <span class="no">as</span> <span class="no">a</span> <span class="no">performance</span> <span class="no">optimization</span> <span class="no">don</span><span class="err">&#39;</span><span class="no">t</span> <span class="no">flush</span> <span class="no">the</span> <span class="no">TLB</span> <span class="no">when</span>
-	 <span class="err">*</span> <span class="nf">clearing</span> <span class="no">the</span> <span class="no">accessed</span> <span class="no">bit</span><span class="p">,</span> <span class="no">it</span> <span class="no">will</span> <span class="no">eventually</span> <span class="no">be</span> <span class="no">flushed</span> <span class="no">by</span>
-	 <span class="err">*</span> <span class="nf">a</span> <span class="no">context</span> <span class="no">switch</span> <span class="no">or</span> <span class="no">a</span> <span class="no">VM</span> <span class="no">operation</span> <span class="no">anyway.</span> <span class="p">[</span> <span class="no">In</span> <span class="no">the</span> <span class="no">rare</span>
-	 <span class="err">*</span> <span class="nf">event</span> <span class="no">of</span> <span class="no">it</span> <span class="no">not</span> <span class="no">getting</span> <span class="no">flushed</span> <span class="no">for</span> <span class="no">a</span> <span class="no">long</span> <span class="no">time</span> <span class="no">the</span> <span class="no">delay</span>
-	 <span class="err">*</span> <span class="nf">shouldn</span><span class="err">&#39;</span><span class="no">t</span> <span class="no">really</span> <span class="no">matter</span> <span class="no">because</span> <span class="no">there</span><span class="err">&#39;</span><span class="no">s</span> <span class="no">no</span> <span class="no">real</span> <span class="no">memory</span>
-	 <span class="err">*</span> <span class="nf">pressure</span> <span class="no">for</span> <span class="no">swapout</span> <span class="no">to</span> <span class="no">react</span> <span class="no">to.</span> <span class="p">]</span>
-	 <span class="err">*/</span>
-	<span class="nf">return</span> <span class="no">ptep_test_and_clear_young</span><span class="p">(</span><span class="no">vma</span><span class="p">,</span> <span class="no">address</span><span class="p">,</span> <span class="no">ptep</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span><span class="err">}</span>
+<span class=c>#define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
+</span><span class=c></span><span class=nf>static</span> <span class=no>inline</span> <span class=no>int</span> <span class=no>ptep_clear_flush_young</span><span class=p>(</span><span class=no>struct</span> <span class=no>vm_area_struct</span> <span class=p>*</span><span class=no>vma</span><span class=p>,</span>
+					 <span class=nf>unsigned</span> <span class=no>long</span> <span class=no>address</span><span class=p>,</span> <span class=no>pte_t</span> <span class=p>*</span><span class=no>ptep</span><span class=p>)</span>
+<span class=err>{</span>
+	<span class=err>/*</span>
+	 <span class=err>*</span> <span class=nf>This</span> <span class=no>comment</span> <span class=no>is</span> <span class=no>borrowed</span> <span class=no>from</span> <span class=no>x86</span><span class=p>,</span> <span class=no>but</span> <span class=no>applies</span> <span class=no>equally</span> <span class=no>to</span> <span class=no>RISC-V</span><span class=p>:</span>
+	 <span class=err>*</span>
+	 <span class=err>*</span> <span class=nf>Clearing</span> <span class=no>the</span> <span class=no>accessed</span> <span class=no>bit</span> <span class=no>without</span> <span class=no>a</span> <span class=no>TLB</span> <span class=no>flush</span>
+	 <span class=err>*</span> <span class=nf>doesn</span><span class=err>&#39;</span><span class=no>t</span> <span class=no>cause</span> <span class=no>data</span> <span class=no>corruption.</span> <span class=p>[</span> <span class=no>It</span> <span class=no>could</span> <span class=no>cause</span> <span class=no>incorrect</span>
+	 <span class=err>*</span> <span class=nf>page</span> <span class=no>aging</span> <span class=no>and</span> <span class=no>the</span> <span class=p>(</span><span class=no>mistaken</span><span class=p>)</span> <span class=no>reclaim</span> <span class=no>of</span> <span class=no>hot</span> <span class=no>pages</span><span class=p>,</span> <span class=no>but</span> <span class=no>the</span>
+	 <span class=err>*</span> <span class=nf>chance</span> <span class=no>of</span> <span class=no>that</span> <span class=no>should</span> <span class=no>be</span> <span class=no>relatively</span> <span class=no>low.</span> <span class=p>]</span>
+	 <span class=err>*</span>
+	 <span class=err>*</span> <span class=nf>So</span> <span class=no>as</span> <span class=no>a</span> <span class=no>performance</span> <span class=no>optimization</span> <span class=no>don</span><span class=err>&#39;</span><span class=no>t</span> <span class=no>flush</span> <span class=no>the</span> <span class=no>TLB</span> <span class=no>when</span>
+	 <span class=err>*</span> <span class=nf>clearing</span> <span class=no>the</span> <span class=no>accessed</span> <span class=no>bit</span><span class=p>,</span> <span class=no>it</span> <span class=no>will</span> <span class=no>eventually</span> <span class=no>be</span> <span class=no>flushed</span> <span class=no>by</span>
+	 <span class=err>*</span> <span class=nf>a</span> <span class=no>context</span> <span class=no>switch</span> <span class=no>or</span> <span class=no>a</span> <span class=no>VM</span> <span class=no>operation</span> <span class=no>anyway.</span> <span class=p>[</span> <span class=no>In</span> <span class=no>the</span> <span class=no>rare</span>
+	 <span class=err>*</span> <span class=nf>event</span> <span class=no>of</span> <span class=no>it</span> <span class=no>not</span> <span class=no>getting</span> <span class=no>flushed</span> <span class=no>for</span> <span class=no>a</span> <span class=no>long</span> <span class=no>time</span> <span class=no>the</span> <span class=no>delay</span>
+	 <span class=err>*</span> <span class=nf>shouldn</span><span class=err>&#39;</span><span class=no>t</span> <span class=no>really</span> <span class=no>matter</span> <span class=no>because</span> <span class=no>there</span><span class=err>&#39;</span><span class=no>s</span> <span class=no>no</span> <span class=no>real</span> <span class=no>memory</span>
+	 <span class=err>*</span> <span class=nf>pressure</span> <span class=no>for</span> <span class=no>swapout</span> <span class=no>to</span> <span class=no>react</span> <span class=no>to.</span> <span class=p>]</span>
+	 <span class=err>*/</span>
+	<span class=nf>return</span> <span class=no>ptep_test_and_clear_young</span><span class=p>(</span><span class=no>vma</span><span class=p>,</span> <span class=no>address</span><span class=p>,</span> <span class=no>ptep</span><span class=p>)</span><span class=c>;
+</span><span class=c></span><span class=err>}</span>
 </code></pre></div><p><code>mk_pte</code>マクロは<code>struct page</code>とプロテクションビットを取り、<code>pte_t</code>を返す。
 <code>pte_page</code>はpteに対応するpageを返す。
 <code>pmd_page</code>は<code>pmd</code>に対応するpageを返す。
-<code>set_pte</code>はpage tableと<code>pte_t</code>を取り、pteをpage tableに挿入する。</p>
-<h2 id="references">References</h2>
-<ul>
-<li><a href="https://people.kernel.org/linusw/arm32-page-tables"target="_blank" rel="noopener noreferrer">ARM32 Page Tables</a>
-</li>
-<li><a href="https://www.kernel.org/doc/gorman/html/understand/understand006.html"target="_blank" rel="noopener noreferrer">Chapter 3  Page Table Management</a>
-</li>
-<li><a href="https://mkguytone.github.io/allocator-navigatable/ch62.html"target="_blank" rel="noopener noreferrer">第62章 ページ記述子（ struct page )</a>
-</li>
-<li><a href="https://stackoverflow.com/questions/41090469/linux-kernel-how-to-get-physical-address-memory-management"target="_blank" rel="noopener noreferrer">linux kernel - how to get physical address (memory management)?</a>
-</li>
-<li><a href="https://www.kernel.org/doc/html/latest/x86/x86_64/5level-paging.html"target="_blank" rel="noopener noreferrer">24.4. 5-level paging</a>
-</li>
-<li><a href="https://www.kimullaa.com/entry/2020/02/16/155746"target="_blank" rel="noopener noreferrer">Linux メモリ管理 徹底入門(カーネル編)</a>
-</li>
-<li><a href="https://github.com/hiboma/hiboma/blob/master/Linux%E3%82%AB%E3%83%BC%E3%83%8D%E3%83%AB%E8%A7%A3%E8%AA%AD%E5%AE%A4/Linux%E3%82%AB%E3%83%BC%E3%83%8D%E3%83%AB%E8%A7%A3%E8%AA%AD%E5%AE%A4-1.md"target="_blank" rel="noopener noreferrer">hiboma/Linuxカーネル解読室/Linuxカーネル解読室-1.md</a>
-</li>
-<li><a href="https://ryuichi1208.hateblo.jp/entry/2019/01/29/221155"target="_blank" rel="noopener noreferrer">【Linux】mm_struct は何してるか</a>
-</li>
-<li><a href="http://www.coins.tsukuba.ac.jp/~yas/coins/os2-2010/2011-01-25/"target="_blank" rel="noopener noreferrer">メモリ管理、アドレス空間、ページテーブル</a>
-</li>
-</ul>
-<p>今回はこのくらいにしておく。次回から<code>arch/riscv/mm/init.c</code>を読んでいく。</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
-</div>
-<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part3/"><span class="iconfont icon-article"></span>Reading linux kernel part3</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part1/"><span class="iconfont icon-article"></span>Reading linux kernel part1</a></p></section></div></section><section id="footer"><div class="footer-wrap">
-    <p class="copyright">©2021 koyamanX</p>
-    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
-        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
-        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
-</section></body>
-
-</html>
+<code>set_pte</code>はpage tableと<code>pte_t</code>を取り、pteをpage tableに挿入する。</p><h2 id=references>References</h2><ul><li><a href=https://people.kernel.org/linusw/arm32-page-tables target=_blank rel="noopener noreferrer">ARM32 Page Tables</a></li><li><a href=https://www.kernel.org/doc/gorman/html/understand/understand006.html target=_blank rel="noopener noreferrer">Chapter 3 Page Table Management</a></li><li><a href=https://mkguytone.github.io/allocator-navigatable/ch62.html target=_blank rel="noopener noreferrer">第62章 ページ記述子（ struct page )</a></li><li><a href=https://stackoverflow.com/questions/41090469/linux-kernel-how-to-get-physical-address-memory-management target=_blank rel="noopener noreferrer">linux kernel - how to get physical address (memory management)?</a></li><li><a href=https://www.kernel.org/doc/html/latest/x86/x86_64/5level-paging.html target=_blank rel="noopener noreferrer">24.4. 5-level paging</a></li><li><a href=https://www.kimullaa.com/entry/2020/02/16/155746 target=_blank rel="noopener noreferrer">Linux メモリ管理 徹底入門(カーネル編)</a></li><li><a href=https://github.com/hiboma/hiboma/blob/master/Linux%E3%82%AB%E3%83%BC%E3%83%8D%E3%83%AB%E8%A7%A3%E8%AA%AD%E5%AE%A4/Linux%E3%82%AB%E3%83%BC%E3%83%8D%E3%83%AB%E8%A7%A3%E8%AA%AD%E5%AE%A4-1.md target=_blank rel="noopener noreferrer">hiboma/Linuxカーネル解読室/Linuxカーネル解読室-1.md</a></li><li><a href=https://ryuichi1208.hateblo.jp/entry/2019/01/29/221155 target=_blank rel="noopener noreferrer">【Linux】mm_struct は何してるか</a></li><li><a href=http://www.coins.tsukuba.ac.jp/~yas/coins/os2-2010/2011-01-25/ target=_blank rel="noopener noreferrer">メモリ管理、アドレス空間、ページテーブル</a></li></ul><p>今回はこのくらいにしておく。次回から<code>arch/riscv/mm/init.c</code>を読んでいく。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/linux/>Linux</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part3/><span class="iconfont icon-article"></span>Reading linux kernel part3</a></p><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part1/><span class="iconfont icon-article"></span>Reading linux kernel part1</a></p></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>

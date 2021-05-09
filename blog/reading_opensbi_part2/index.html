@@ -1,241 +1,192 @@
-<!DOCTYPE html>
-<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<meta name="supported-color-schemes" content="light dark"><title>Reading OpenSBI part2&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Reading OpenSBI part2" /><body><section id="header">
-    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
-        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
-    <h1 class="article title">Reading OpenSBI part2</h1><p class="article date">Tuesday, March 16, 2021</p></section><article class="article markdown-body"><p><a href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part1/">前回</a>
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>Reading OpenSBI part2&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="Reading OpenSBI part2"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">Reading OpenSBI part2</h1><p class="article date">Tuesday, March 16, 2021</p></section><article class="article markdown-body"><p><a href=https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part1/>前回</a>
 はOpenSBIの移植を行った。
 今回はOpenSBIの実装を読んでいこうと思う。
-アセンブリはあまり読みたくないので、できるかぎり飛ばしていく。</p>
-<p><code>firmware/fw_base.S</code>が基本となっており、ファームウェアのタイプによって<code>firmware/fw_payload.S</code>や<code>firmware/fw_dynamic.S</code>、<code>firmware/fw_jump.S</code>が
+アセンブリはあまり読みたくないので、できるかぎり飛ばしていく。</p><p><code>firmware/fw_base.S</code>が基本となっており、ファームウェアのタイプによって<code>firmware/fw_payload.S</code>や<code>firmware/fw_dynamic.S</code>、<code>firmware/fw_jump.S</code>が
 使われる。
-今回は、<code>FW\_PAYLOAD</code>にてLinux kernelをPAYLOADとして指定する。</p>
-<h2 id="リンカスクリプト">リンカスクリプト</h2>
-<p><code>firmware/fw_base.ldS</code>
+今回は、<code>FW\_PAYLOAD</code>にてLinux kernelをPAYLOADとして指定する。</p><h2 id=リンカスクリプト>リンカスクリプト</h2><p><code>firmware/fw_base.ldS</code>
 ちなみに、ldSはプリプロセッサにかけられる。
-以下に抜粋する。</p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm">	<span class="err">.</span> <span class="err">=</span> <span class="nf">FW_TEXT_START</span><span class="c">;
-</span><span class="c"></span>	<span class="no">PROVIDE</span><span class="p">(</span><span class="no">_fw_start</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
-</span><span class="c"></span>	<span class="p">.</span> <span class="err">=</span> <span class="no">ALIGN</span><span class="p">(</span><span class="mi">0x1000</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>	<span class="no">.text</span> <span class="p">:</span>
- 	<span class="err">{</span>
-		<span class="nf">PROVIDE</span><span class="p">(</span><span class="no">_text_start</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
-</span><span class="c"></span>		<span class="p">*(.</span><span class="no">entry</span><span class="p">)</span>
-		<span class="err">*(</span><span class="na">.text</span><span class="p">)</span>
-		<span class="err">.</span> <span class="err">=</span> <span class="nf">ALIGN</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>		<span class="no">PROVIDE</span><span class="p">(</span><span class="no">_text_end</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
-</span><span class="c"></span>	<span class="err">}</span>
-	<span class="err">.</span> <span class="err">=</span> <span class="nf">ALIGN</span><span class="p">(</span><span class="mi">0x1000</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>	<span class="no">.rodata</span> <span class="p">:</span>
-	<span class="err">{</span>
-		<span class="nf">PROVIDE</span><span class="p">(</span><span class="no">_rodata_start</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
-</span><span class="c"></span>		<span class="p">*(.</span><span class="no">rodata</span> <span class="no">.rodata.</span><span class="p">*)</span>
-		<span class="err">.</span> <span class="err">=</span> <span class="nf">ALIGN</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>		<span class="no">PROVIDE</span><span class="p">(</span><span class="no">_rodata_end</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
-</span><span class="c"></span>	<span class="err">}</span>
-	<span class="err">.</span> <span class="err">=</span> <span class="nf">ALIGN</span><span class="p">(</span><span class="mi">0x1000</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>	<span class="no">.data</span> <span class="p">:</span>
-	<span class="err">{</span>
-		<span class="nf">PROVIDE</span><span class="p">(</span><span class="no">_data_start</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
-</span><span class="c"></span>
-		<span class="err">*(</span><span class="na">.sdata</span><span class="p">)</span>
-		<span class="err">*(</span><span class="na">.sdata.</span><span class="p">*)</span>
-		<span class="err">*(</span><span class="na">.data</span><span class="p">)</span>
-		<span class="err">*(</span><span class="na">.data.</span><span class="p">*)</span>
-		<span class="err">*(</span><span class="na">.readmostly.data</span><span class="p">)</span>
-		<span class="err">*(*</span><span class="na">.data</span><span class="p">)</span>
-		<span class="err">.</span> <span class="err">=</span> <span class="nf">ALIGN</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>
-		<span class="nf">PROVIDE</span><span class="p">(</span><span class="no">_data_end</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
-</span><span class="c"></span>	<span class="err">}</span>
-	<span class="err">.</span> <span class="err">=</span> <span class="nf">ALIGN</span><span class="p">(</span><span class="mi">0x1000</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>	<span class="no">.bss</span> <span class="p">:</span>
-	<span class="err">{</span>
-		<span class="nf">PROVIDE</span><span class="p">(</span><span class="no">_bss_start</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
-</span><span class="c"></span>		<span class="p">*(.</span><span class="no">sbss</span><span class="p">)</span>
-		<span class="err">*(</span><span class="na">.sbss.</span><span class="p">*)</span>
-		<span class="err">*(</span><span class="na">.bss</span><span class="p">)</span>
-		<span class="err">*(</span><span class="na">.bss.</span><span class="p">*)</span>
-		<span class="err">.</span> <span class="err">=</span> <span class="nf">ALIGN</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>		<span class="no">PROVIDE</span><span class="p">(</span><span class="no">_bss_end</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
-</span><span class="c"></span>	<span class="err">}</span>
-	<span class="err">.</span> <span class="err">=</span> <span class="nf">ALIGN</span><span class="p">(</span><span class="mi">0x1000</span><span class="p">)</span><span class="c">;
-</span><span class="c"></span>	<span class="no">PROVIDE</span><span class="p">(</span><span class="no">_fw_end</span> <span class="err">=</span> <span class="p">.)</span><span class="c">;
+以下に抜粋する。</p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm>	<span class=err>.</span> <span class=err>=</span> <span class=nf>FW_TEXT_START</span><span class=c>;
+</span><span class=c></span>	<span class=no>PROVIDE</span><span class=p>(</span><span class=no>_fw_start</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
+</span><span class=c></span>	<span class=p>.</span> <span class=err>=</span> <span class=no>ALIGN</span><span class=p>(</span><span class=mi>0x1000</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>	<span class=no>.text</span> <span class=p>:</span>
+ 	<span class=err>{</span>
+		<span class=nf>PROVIDE</span><span class=p>(</span><span class=no>_text_start</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
+</span><span class=c></span>		<span class=p>*(.</span><span class=no>entry</span><span class=p>)</span>
+		<span class=err>*(</span><span class=na>.text</span><span class=p>)</span>
+		<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=mi>8</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>		<span class=no>PROVIDE</span><span class=p>(</span><span class=no>_text_end</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
+</span><span class=c></span>	<span class=err>}</span>
+	<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=mi>0x1000</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>	<span class=no>.rodata</span> <span class=p>:</span>
+	<span class=err>{</span>
+		<span class=nf>PROVIDE</span><span class=p>(</span><span class=no>_rodata_start</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
+</span><span class=c></span>		<span class=p>*(.</span><span class=no>rodata</span> <span class=no>.rodata.</span><span class=p>*)</span>
+		<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=mi>8</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>		<span class=no>PROVIDE</span><span class=p>(</span><span class=no>_rodata_end</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
+</span><span class=c></span>	<span class=err>}</span>
+	<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=mi>0x1000</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>	<span class=no>.data</span> <span class=p>:</span>
+	<span class=err>{</span>
+		<span class=nf>PROVIDE</span><span class=p>(</span><span class=no>_data_start</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
+</span><span class=c></span>
+		<span class=err>*(</span><span class=na>.sdata</span><span class=p>)</span>
+		<span class=err>*(</span><span class=na>.sdata.</span><span class=p>*)</span>
+		<span class=err>*(</span><span class=na>.data</span><span class=p>)</span>
+		<span class=err>*(</span><span class=na>.data.</span><span class=p>*)</span>
+		<span class=err>*(</span><span class=na>.readmostly.data</span><span class=p>)</span>
+		<span class=err>*(*</span><span class=na>.data</span><span class=p>)</span>
+		<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=mi>8</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>
+		<span class=nf>PROVIDE</span><span class=p>(</span><span class=no>_data_end</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
+</span><span class=c></span>	<span class=err>}</span>
+	<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=mi>0x1000</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>	<span class=no>.bss</span> <span class=p>:</span>
+	<span class=err>{</span>
+		<span class=nf>PROVIDE</span><span class=p>(</span><span class=no>_bss_start</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
+</span><span class=c></span>		<span class=p>*(.</span><span class=no>sbss</span><span class=p>)</span>
+		<span class=err>*(</span><span class=na>.sbss.</span><span class=p>*)</span>
+		<span class=err>*(</span><span class=na>.bss</span><span class=p>)</span>
+		<span class=err>*(</span><span class=na>.bss.</span><span class=p>*)</span>
+		<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=mi>8</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>		<span class=no>PROVIDE</span><span class=p>(</span><span class=no>_bss_end</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
+</span><span class=c></span>	<span class=err>}</span>
+	<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=mi>0x1000</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>	<span class=no>PROVIDE</span><span class=p>(</span><span class=no>_fw_end</span> <span class=err>=</span> <span class=p>.)</span><span class=c>;
 </span></code></pre></div><p>リンカスクリプトをもとに、メモリマップを作成。
-<span class="image-container"><span class="link" ><a href="./image00.png" 
-        target="_blank"><img class="img" src="./image00.png"/></a></span>
-</span></p>
-<p>OpenSBIの実態はFW_TEXT_STARTで指定したアドレスから始まる。</p>
-<h2 id="fw_bases">fw_base.S</h2>
-<p>エントリーポイントは<code>_start</code>である。</p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="nl">_start:</span>
-	<span class="err">/*</span> <span class="nf">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">a2は前段のブートローダーからの情報を保持しているはず</span><span class="err">。</span> <span class="p">*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="err">レジスタを退避(</span><span class="nf">s0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">s2</span><span class="p">)</span> <span class="err">&lt;</span><span class="p">-</span> <span class="p">(</span><span class="no">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">a2</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">MOV_3R</span>	<span class="no">s0</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s2</span><span class="p">,</span> <span class="no">a2</span>
-	<span class="err">/*</span> <span class="nf">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">a2が使える</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">call</span>	<span class="no">fw_boot_hart</span>	<span class="err">/</span><span class="p">*</span> <span class="no">fw_payload.S</span><span class="p">(</span><span class="no">FW_PAYLOADを仮定</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="nf">a0</span> <span class="err">&lt;</span><span class="p">-</span> <span class="p">-</span><span class="mi">1</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">add</span>	<span class="no">a6</span><span class="p">,</span> <span class="no">a0</span><span class="p">,</span> <span class="no">zero</span>	<span class="err">/</span><span class="p">*</span> <span class="no">a6</span> <span class="err">&lt;</span><span class="p">-</span> <span class="p">-</span><span class="mi">1</span> <span class="err">+</span> <span class="mi">0</span> <span class="p">*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="err">レジスタを復帰(</span><span class="nf">a0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">a2</span><span class="p">)</span> <span class="err">&lt;</span><span class="p">-</span> <span class="p">(</span><span class="no">s0</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">s2</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">MOV_3R</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">s0</span><span class="p">,</span> <span class="no">a1</span><span class="p">,</span> <span class="no">s1</span><span class="p">,</span> <span class="no">a2</span><span class="p">,</span> <span class="no">s2</span>
-	<span class="nf">li</span>	<span class="no">a7</span><span class="p">,</span> <span class="p">-</span><span class="mi">1</span>	<span class="err">/</span><span class="p">*</span> <span class="no">a7</span> <span class="err">&lt;</span><span class="p">-</span> <span class="p">-</span><span class="mi">1</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">beq</span>	<span class="no">a6</span><span class="p">,</span> <span class="no">a7</span><span class="p">,</span> <span class="no">_try_lottery</span>	<span class="err">/</span><span class="p">*</span> <span class="no">always</span> <span class="no">taken</span> <span class="no">with</span> <span class="no">this</span> <span class="no">code</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">bne</span>	<span class="no">a0</span><span class="p">,</span> <span class="no">a6</span><span class="p">,</span> <span class="no">_wait_relocate_copy_done</span>
-<span class="nl">_try_lottery:</span>
-	<span class="nf">la</span>	<span class="no">a6</span><span class="p">,</span> <span class="no">_relocate_lottery</span>	<span class="err">/</span><span class="p">*</span> <span class="no">symbol</span> <span class="no">in</span> <span class="no">bss</span> <span class="no">section</span> <span class="p">(</span><span class="no">inited</span> <span class="no">to</span> <span class="no">zero</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">li</span>	<span class="no">a7</span><span class="p">,</span> <span class="mi">1</span>
-	<span class="nf">amoadd.w</span> <span class="no">a6</span><span class="p">,</span> <span class="no">a7</span><span class="p">,</span> <span class="p">(</span><span class="no">a6</span><span class="p">)</span>	<span class="err">/</span><span class="p">*</span> <span class="no">a6</span> <span class="err">&lt;</span><span class="p">-</span> <span class="p">*(</span><span class="no">a6</span><span class="p">),</span> <span class="p">*(</span><span class="no">a6</span><span class="p">)</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">a7</span> <span class="p">*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="err">一番最初に</span><span class="nf">_relocate_lottery番地から0を読み出したhartがブートhartになる</span><span class="err">。</span><span class="p">*</span><span class="err">/</span>
-	<span class="nf">bnez</span>	<span class="no">a6</span><span class="p">,</span> <span class="no">_wait_relocate_copy_done</span>	<span class="err">/</span><span class="p">*</span> <span class="err">それ以外の</span><span class="no">hartはboot</span> <span class="no">hartが終わるのを待つ</span> <span class="p">*</span><span class="err">/</span>
-<span class="na">...</span>
-</code></pre></div><h2 id="fw_payloads">fw_payload.S</h2>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="nl">fw_boot_hart:</span>
-	<span class="nf">li</span>	<span class="no">a0</span><span class="p">,</span> <span class="p">-</span><span class="mi">1</span>
-	<span class="nf">ret</span>
-</code></pre></div><h2 id="_relocate">_relocate</h2>
-<p><code>fw_base.S</code>続き<br>
-<code>load address != link address</code>のときに、relocateを行う。<br>
-例えば、<code>load address = 0x00000000</code>、<code>link address = 0x80000000</code>を考える。\</p>
-<ul>
-<li>リンク時
-<ul>
-<li><code>_start = 0x80000000</code></li>
-<li><code>_fw_start = 0x80000000</code></li>
-</ul>
-</li>
-<li>ロード時
-<ul>
-<li><code>_start = 0x00000000</code></li>
-<li><code>_fw_start = 0x00000000</code></li>
-</ul>
-</li>
-</ul>
-<p><code>_link_start</code>, <code>_load_start</code>は<code>_fw_start</code>自体の値を持っているため、リンク時の<code>_fw_start = 0x80000000</code>となる。<br>
-<code>la</code>命令を用いたアドレス生成はauipc, addペアでPC-Relativeでアドレス生成がされるので、実行時のロードアドレスになる。</p>
-<div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm">	<span class="nf">la</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">_load_start</span>			<span class="err">/</span><span class="p">*</span> <span class="no">t0</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_load_start</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">la</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">_start</span>				<span class="err">/</span><span class="p">*</span> <span class="no">load</span> <span class="no">address</span> <span class="p">(</span><span class="no">PC-Relative</span><span class="p">)*</span><span class="err">/</span>
-	<span class="nf">REG_S</span>	<span class="no">t1</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t0</span><span class="p">)</span>			<span class="err">/</span><span class="p">*</span> <span class="p">*(</span><span class="no">_load_start</span><span class="p">)</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_start</span> <span class="p">*</span><span class="err">/</span>
-<span class="nl">_relocate:</span>
-	<span class="nf">la</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">_link_start</span>			<span class="err">/</span><span class="p">*</span> <span class="no">t0</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_link_start</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">REG_L</span>	<span class="no">t0</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t0</span><span class="p">)</span>			<span class="err">/</span><span class="p">*</span> <span class="no">t0</span> <span class="err">&lt;</span><span class="p">-</span> <span class="mi">0x80000000</span><span class="p">(</span><span class="no">_fw_start</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">la</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">_link_end</span>			<span class="err">/</span><span class="p">*</span> <span class="no">t1</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_link_end</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">REG_L</span>	<span class="no">t1</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t1</span><span class="p">)</span>			<span class="err">/</span><span class="p">*</span> <span class="no">t1</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_fw_reloc_end</span><span class="p">(</span><span class="no">Link</span> <span class="no">Address</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">la</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">_load_start</span>			<span class="err">/</span><span class="p">*</span> <span class="no">t2</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_load_start</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">REG_L</span>	<span class="no">t2</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t2</span><span class="p">)</span>			<span class="err">/</span><span class="p">*</span> <span class="no">t2</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_0x00000000</span><span class="p">(</span><span class="no">_start</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="nf">calc</span> <span class="no">size</span> <span class="no">in</span> <span class="no">bytes</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">sub</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">t0</span>				<span class="err">/</span><span class="p">*</span> <span class="no">t3</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_fw_reloc_end</span><span class="p">(</span><span class="no">Link</span> <span class="no">Address</span><span class="p">)</span> <span class="p">-</span> <span class="no">_fw_start</span><span class="p">(</span><span class="no">Link</span> <span class="no">Address</span><span class="p">)*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="nf">calc</span> <span class="no">load_end</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">add</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">t2</span>				<span class="err">/</span><span class="p">*</span> <span class="no">t3</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">t3</span> <span class="err">+</span> <span class="no">_start</span><span class="p">(</span><span class="no">Load</span> <span class="no">Address</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">beq</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">_relocate_done</span>	<span class="err">/</span><span class="p">*</span> <span class="no">if</span> <span class="no">link</span> <span class="no">address</span> <span class="err">==</span> <span class="no">load</span> <span class="no">address</span><span class="p">,</span> <span class="no">then</span> <span class="no">_relocate_done</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">la</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">_relocate_done</span>
-	<span class="nf">sub</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t4</span><span class="p">,</span> <span class="no">t2</span>				<span class="err">/</span><span class="p">*</span> <span class="no">offset</span> <span class="no">of</span> <span class="no">_relocate_done</span> <span class="no">from</span> <span class="no">_start</span><span class="p">(</span><span class="no">load</span> <span class="no">address</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">add</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">t4</span><span class="p">,</span> <span class="no">t0</span>				<span class="err">/</span><span class="p">*</span> <span class="no">link</span> <span class="no">address</span> <span class="no">of</span> <span class="no">_relocate_done</span> <span class="p">*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="nf">if</span> <span class="no">load</span> <span class="no">address</span> <span class="err">&lt;</span> <span class="no">link</span> <span class="no">address</span> <span class="no">then</span> <span class="no">_relocate_copy_to_upper</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">blt</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">_relocate_copy_to_upper</span>
-<span class="nl">_relocate_copy_to_lower:</span>
-	<span class="nf">ble</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">_relocate_copy_to_lower_loop</span>
-	<span class="nf">la</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">_relocate_lottery</span>
-	<span class="nf">BRANGE</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">_start_hang</span>
-	<span class="nf">la</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">_boot_status</span>
-	<span class="nf">BRANGE</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">_start_hang</span>
-	<span class="nf">la</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">_relocate</span>
-	<span class="nf">la</span>	<span class="no">t5</span><span class="p">,</span> <span class="no">_relocate_done</span>
-	<span class="nf">BRANGE</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">_start_hang</span>
-	<span class="nf">BRANGE</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">t5</span><span class="p">,</span> <span class="no">_start_hang</span>
-	<span class="nf">BRANGE</span>  <span class="no">t3</span><span class="p">,</span> <span class="no">t5</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">_start_hang</span>
-<span class="nl">_relocate_copy_to_lower_loop:</span>
-	<span class="nf">REG_L</span>	<span class="no">t3</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t2</span><span class="p">)</span>
-	<span class="nf">REG_S</span>	<span class="no">t3</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t0</span><span class="p">)</span>
-	<span class="nf">add</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">__SIZEOF_POINTER__</span>
-	<span class="nf">add</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">__SIZEOF_POINTER__</span>
-	<span class="nf">blt</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">_relocate_copy_to_lower_loop</span>
-	<span class="nf">jr</span>	<span class="no">t4</span>
-<span class="nl">_relocate_copy_to_upper:</span>
-	<span class="err">/*</span> <span class="nl">t3:</span> <span class="nf">load</span> <span class="no">end</span><span class="p">,</span> <span class="no">t0</span><span class="p">:</span> <span class="no">link</span> <span class="no">start</span> <span class="p">*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="nf">if</span> <span class="no">t3</span> <span class="err">&lt;=</span> <span class="no">t0</span> <span class="no">then</span> <span class="no">_relocate_copy_to_upper_loop</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">ble</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">_relocate_copy_to_upper_loop</span>
-	<span class="err">/*</span> <span class="nf">t2</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_relocate_lottery</span> <span class="p">*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="nf">_relocate_lottery</span> <span class="err">==</span> <span class="no">number</span> <span class="no">of</span> <span class="no">hart</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">la</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">_relocate_lottery</span>
-	<span class="err">/*</span> <span class="nf">if</span> <span class="no">not</span> <span class="no">_link_start</span> <span class="err">&lt;=</span> <span class="no">_relocate_lotttery</span> <span class="err">&amp;&amp;</span> <span class="no">_relocate_lottery</span> <span class="err">&lt;</span> <span class="no">_load_end</span><span class="p">,</span> <span class="no">jump</span> <span class="no">_start_hang</span><span class="p">*</span><span class="err">/</span>
-	<span class="nf">BRANGE</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">_start_hang</span>
-	<span class="nf">la</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">_boot_status</span>
-	<span class="err">/*</span> <span class="nf">if</span> <span class="no">not</span> <span class="no">_link_start</span> <span class="err">&lt;=</span> <span class="no">_boot_status</span> <span class="err">&amp;&amp;</span> <span class="no">_boot_status</span> <span class="err">&lt;</span> <span class="no">_load_end</span><span class="p">,</span> <span class="no">jump</span> <span class="no">_start_hang</span><span class="p">*</span><span class="err">/</span>
-	<span class="nf">BRANGE</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">_start_hang</span>
-	<span class="nf">la</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">_relocate</span>
-	<span class="nf">la</span>	<span class="no">t5</span><span class="p">,</span> <span class="no">_relocate_done</span>
-	<span class="err">/*</span> <span class="nf">if</span> <span class="no">not</span> <span class="no">_link_start</span> <span class="err">&lt;=</span> <span class="no">_relocate</span> <span class="err">&amp;&amp;</span> <span class="no">_relocate</span> <span class="err">&lt;</span> <span class="no">_load_end</span><span class="p">,</span> <span class="no">jump</span> <span class="no">_start_hang</span><span class="p">*</span><span class="err">/</span>
-	<span class="nf">BRANGE</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">t2</span><span class="p">,</span> <span class="no">_start_hang</span>
-	<span class="err">/*</span> <span class="nf">if</span> <span class="no">not</span> <span class="no">_link_start</span> <span class="err">&lt;=</span> <span class="no">_relocate_done</span> <span class="err">&amp;&amp;</span> <span class="no">_relocate_done</span> <span class="err">&lt;</span> <span class="no">_load_end</span><span class="p">,</span> <span class="no">jump</span> <span class="no">_start_hang</span><span class="p">*</span><span class="err">/</span>
-	<span class="nf">BRANGE</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">t5</span><span class="p">,</span> <span class="no">_start_hang</span>
-	<span class="err">/*</span> <span class="nf">if</span> <span class="no">not</span> <span class="no">_relocate</span> <span class="err">&lt;=</span> <span class="no">_link_start</span> <span class="err">&amp;&amp;</span> <span class="no">_link_start</span> <span class="err">&lt;</span> <span class="no">_relocate_done</span><span class="p">,</span> <span class="no">jump</span> <span class="no">_start_hang</span><span class="p">*</span><span class="err">/</span>
-	<span class="nf">BRANGE</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">t5</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">_start_hang</span>
-<span class="nl">_relocate_copy_to_upper_loop:</span>
-	<span class="err">/*</span> <span class="nl">t3:</span> <span class="nf">load</span> <span class="no">end</span><span class="p">,</span> <span class="no">t1</span><span class="p">:</span> <span class="no">fw_reloc_end</span><span class="p">(</span><span class="no">link</span> <span class="no">end</span><span class="p">),</span> <span class="no">t0</span><span class="p">:</span> <span class="no">link</span> <span class="no">start</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">add</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="p">-</span><span class="no">__SIZEOF_POINTER__</span>				<span class="err">/</span><span class="p">*</span> <span class="no">t3</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">load</span> <span class="no">end</span> <span class="p">-</span> <span class="mi">4</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">add</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="p">-</span><span class="no">__SIZEOF_POINTER__</span>				<span class="err">/</span><span class="p">*</span> <span class="no">t1</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">link</span> <span class="no">end</span> <span class="p">-</span> <span class="mi">4</span><span class="p">*</span><span class="err">/</span>
-	<span class="nf">REG_L</span>	<span class="no">t2</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t3</span><span class="p">)</span>							<span class="err">/</span><span class="p">*</span> <span class="no">t2</span> <span class="err">&lt;</span><span class="p">-</span> <span class="p">*(</span><span class="no">t3</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">REG_S</span>	<span class="no">t2</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t1</span><span class="p">)</span>							<span class="err">/</span><span class="p">*</span> <span class="p">*(</span><span class="no">t1</span><span class="p">)</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">t2</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">blt</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">_relocate_copy_to_upper_loop</span>	<span class="err">/</span><span class="p">*</span> <span class="no">link</span> <span class="no">start</span> <span class="err">&lt;</span> <span class="no">link</span> <span class="no">end</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">jr</span>	<span class="no">t4</span>										<span class="err">/</span><span class="p">*</span> <span class="no">link</span> <span class="no">address</span> <span class="no">of</span> <span class="no">_relocate_done</span> <span class="p">*</span><span class="err">/</span>
-<span class="nl">_wait_relocate_copy_done:</span>
-	<span class="nf">la</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">_start</span>
-	<span class="nf">la</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">_link_start</span>
-	<span class="nf">REG_L</span>	<span class="no">t1</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t1</span><span class="p">)</span>
-	<span class="nf">beq</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t1</span><span class="p">,</span> <span class="no">_wait_for_boot_hart</span>				<span class="err">/</span><span class="p">*</span> <span class="no">load</span> <span class="no">address</span> <span class="err">==</span> <span class="no">link</span> <span class="no">address</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">la</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">_boot_status</span>
-	<span class="nf">la</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">_wait_for_boot_hart</span>
-	<span class="err">/*</span> <span class="nf">relocate</span> <span class="no">load</span> <span class="no">address</span> <span class="no">of</span> <span class="no">_wait_for_boot_hart</span> <span class="no">to</span> <span class="no">link</span> <span class="no">address</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">sub</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">t0</span>
-	<span class="nf">add</span>	<span class="no">t3</span><span class="p">,</span> <span class="no">t3</span><span class="p">,</span> <span class="no">t1</span>
-<span class="err">1:</span>
-	<span class="err">/*</span> <span class="nf">waitting</span> <span class="no">for</span> <span class="no">relocate</span> <span class="no">copy</span> <span class="no">done</span> <span class="p">(</span><span class="no">_boot_status</span> <span class="err">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">li</span>	<span class="no">t4</span><span class="p">,</span> <span class="no">BOOT_STATUS_RELOCATE_DONE</span>
-	<span class="nf">REG_L</span>	<span class="no">t5</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t2</span><span class="p">)</span>		<span class="err">/</span><span class="p">*</span> <span class="no">t2</span> <span class="err">&lt;</span><span class="p">-</span> <span class="no">_boot_status</span> <span class="p">*</span><span class="err">/</span>
-	<span class="err">/*</span> <span class="nf">Reduce</span> <span class="no">the</span> <span class="no">bus</span> <span class="no">traffic</span> <span class="no">so</span> <span class="no">that</span> <span class="no">boot</span> <span class="no">hart</span> <span class="no">may</span> <span class="no">proceed</span> <span class="no">faster</span> <span class="p">*</span><span class="err">/</span>
-	<span class="nf">nop</span>
-	<span class="nf">nop</span>
-	<span class="nf">nop</span>
-	<span class="err">/*</span> <span class="nf">t5</span> <span class="err">&lt;</span><span class="p">-</span> <span class="p">*(</span><span class="no">_boot_status</span><span class="p">)</span><span class="c">; t4 &lt;- BOOT_STATUS_RELOCATE_DONE; */
-</span><span class="c"></span>	<span class="no">bgt</span>     <span class="no">t4</span><span class="p">,</span> <span class="no">t5</span><span class="p">,</span> <span class="mi">1</span><span class="no">b</span>
-	<span class="nf">jr</span>	<span class="no">t3</span>						<span class="err">/</span><span class="p">*</span> <span class="no">wait_for_boot_hart</span> <span class="p">*</span><span class="err">/</span>
-<span class="nl">_relocate_done:</span>
-	<span class="err">/*</span>
-	 <span class="err">*</span> <span class="nf">Mark</span> <span class="no">relocate</span> <span class="no">copy</span> <span class="no">done</span>
-	 <span class="err">*</span> <span class="nf">Use</span> <span class="no">_boot_status</span> <span class="no">copy</span> <span class="no">relative</span> <span class="no">to</span> <span class="no">the</span> <span class="no">load</span> <span class="no">address</span>
-	 <span class="err">*/</span>
-	<span class="nf">la</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">_boot_status</span>
-	<span class="nf">la</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">_link_start</span>
-	<span class="nf">REG_L</span>	<span class="no">t1</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t1</span><span class="p">)</span>
-	<span class="nf">la</span>	<span class="no">t2</span><span class="p">,</span> <span class="no">_load_start</span>
-	<span class="nf">REG_L</span>	<span class="no">t2</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t2</span><span class="p">)</span>
-	<span class="nf">sub</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">t1</span>
-	<span class="nf">add</span>	<span class="no">t0</span><span class="p">,</span> <span class="no">t0</span><span class="p">,</span> <span class="no">t2</span>
-	<span class="nf">li</span>	<span class="no">t1</span><span class="p">,</span> <span class="no">BOOT_STATUS_RELOCATE_DONE</span>
-	<span class="nf">REG_S</span>	<span class="no">t1</span><span class="p">,</span> <span class="mi">0</span><span class="p">(</span><span class="no">t0</span><span class="p">)</span>
-	<span class="nf">fence</span>	<span class="no">rw</span><span class="p">,</span> <span class="no">rw</span>
-<span class="na">...</span>
-</code></pre></div><div class="highlight"><pre class="chroma"><code class="language-asm" data-lang="asm"><span class="na">...</span>
-<span class="nl">_load_start:</span>
-	<span class="nf">RISCV_PTR</span>	<span class="no">_fw_start</span>
-<span class="nl">_link_start:</span>
-	<span class="nf">RISCV_PTR</span>	<span class="no">_fw_start</span>
-<span class="nl">_link_end:</span>
-	<span class="nf">RISCV_PTR</span>	<span class="no">_fw_reloc_end</span>
-<span class="na">...</span>
-</code></pre></div><span class="image-container"><span class="link" ><a href="./image01.png" 
-        target="_blank"><img class="img" src="./image01.png"/></a></span>
-</span>
-<p>今回は、<code>_relocate_done</code>までにしておく。
-これ以降は、link addressになる。</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
-</div>
-<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part3/"><span class="iconfont icon-article"></span>Reading OpenSBI part3</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part1/"><span class="iconfont icon-article"></span>Reading OpenSBI part1</a></p></section></div></section><section id="footer"><div class="footer-wrap">
-    <p class="copyright">©2021 koyamanX</p>
-    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
-        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
-        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
-</section></body>
-
-</html>
+<span class=image-container><span class=link><a href=./image00.png target=_blank><img class=img src=./image00.png></a></span></span></p><p>OpenSBIの実態はFW_TEXT_STARTで指定したアドレスから始まる。</p><h2 id=fw_bases>fw_base.S</h2><p>エントリーポイントは<code>_start</code>である。</p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=nl>_start:</span>
+	<span class=err>/*</span> <span class=nf>a0</span><span class=p>,</span> <span class=no>a1</span><span class=p>,</span> <span class=no>a2は前段のブートローダーからの情報を保持しているはず</span><span class=err>。</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=err>レジスタを退避(</span><span class=nf>s0</span><span class=p>,</span> <span class=no>s1</span><span class=p>,</span> <span class=no>s2</span><span class=p>)</span> <span class=err>&lt;</span><span class=p>-</span> <span class=p>(</span><span class=no>a0</span><span class=p>,</span> <span class=no>a1</span><span class=p>,</span> <span class=no>a2</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>MOV_3R</span>	<span class=no>s0</span><span class=p>,</span> <span class=no>a0</span><span class=p>,</span> <span class=no>s1</span><span class=p>,</span> <span class=no>a1</span><span class=p>,</span> <span class=no>s2</span><span class=p>,</span> <span class=no>a2</span>
+	<span class=err>/*</span> <span class=nf>a0</span><span class=p>,</span> <span class=no>a1</span><span class=p>,</span> <span class=no>a2が使える</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>call</span>	<span class=no>fw_boot_hart</span>	<span class=err>/</span><span class=p>*</span> <span class=no>fw_payload.S</span><span class=p>(</span><span class=no>FW_PAYLOADを仮定</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=nf>a0</span> <span class=err>&lt;</span><span class=p>-</span> <span class=p>-</span><span class=mi>1</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>add</span>	<span class=no>a6</span><span class=p>,</span> <span class=no>a0</span><span class=p>,</span> <span class=no>zero</span>	<span class=err>/</span><span class=p>*</span> <span class=no>a6</span> <span class=err>&lt;</span><span class=p>-</span> <span class=p>-</span><span class=mi>1</span> <span class=err>+</span> <span class=mi>0</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=err>レジスタを復帰(</span><span class=nf>a0</span><span class=p>,</span> <span class=no>a1</span><span class=p>,</span> <span class=no>a2</span><span class=p>)</span> <span class=err>&lt;</span><span class=p>-</span> <span class=p>(</span><span class=no>s0</span><span class=p>,</span> <span class=no>s1</span><span class=p>,</span> <span class=no>s2</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>MOV_3R</span>	<span class=no>a0</span><span class=p>,</span> <span class=no>s0</span><span class=p>,</span> <span class=no>a1</span><span class=p>,</span> <span class=no>s1</span><span class=p>,</span> <span class=no>a2</span><span class=p>,</span> <span class=no>s2</span>
+	<span class=nf>li</span>	<span class=no>a7</span><span class=p>,</span> <span class=p>-</span><span class=mi>1</span>	<span class=err>/</span><span class=p>*</span> <span class=no>a7</span> <span class=err>&lt;</span><span class=p>-</span> <span class=p>-</span><span class=mi>1</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>beq</span>	<span class=no>a6</span><span class=p>,</span> <span class=no>a7</span><span class=p>,</span> <span class=no>_try_lottery</span>	<span class=err>/</span><span class=p>*</span> <span class=no>always</span> <span class=no>taken</span> <span class=no>with</span> <span class=no>this</span> <span class=no>code</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>bne</span>	<span class=no>a0</span><span class=p>,</span> <span class=no>a6</span><span class=p>,</span> <span class=no>_wait_relocate_copy_done</span>
+<span class=nl>_try_lottery:</span>
+	<span class=nf>la</span>	<span class=no>a6</span><span class=p>,</span> <span class=no>_relocate_lottery</span>	<span class=err>/</span><span class=p>*</span> <span class=no>symbol</span> <span class=no>in</span> <span class=no>bss</span> <span class=no>section</span> <span class=p>(</span><span class=no>inited</span> <span class=no>to</span> <span class=no>zero</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>li</span>	<span class=no>a7</span><span class=p>,</span> <span class=mi>1</span>
+	<span class=nf>amoadd.w</span> <span class=no>a6</span><span class=p>,</span> <span class=no>a7</span><span class=p>,</span> <span class=p>(</span><span class=no>a6</span><span class=p>)</span>	<span class=err>/</span><span class=p>*</span> <span class=no>a6</span> <span class=err>&lt;</span><span class=p>-</span> <span class=p>*(</span><span class=no>a6</span><span class=p>),</span> <span class=p>*(</span><span class=no>a6</span><span class=p>)</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>a7</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=err>一番最初に</span><span class=nf>_relocate_lottery番地から0を読み出したhartがブートhartになる</span><span class=err>。</span><span class=p>*</span><span class=err>/</span>
+	<span class=nf>bnez</span>	<span class=no>a6</span><span class=p>,</span> <span class=no>_wait_relocate_copy_done</span>	<span class=err>/</span><span class=p>*</span> <span class=err>それ以外の</span><span class=no>hartはboot</span> <span class=no>hartが終わるのを待つ</span> <span class=p>*</span><span class=err>/</span>
+<span class=na>...</span>
+</code></pre></div><h2 id=fw_payloads>fw_payload.S</h2><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=nl>fw_boot_hart:</span>
+	<span class=nf>li</span>	<span class=no>a0</span><span class=p>,</span> <span class=p>-</span><span class=mi>1</span>
+	<span class=nf>ret</span>
+</code></pre></div><h2 id=_relocate>_relocate</h2><p><code>fw_base.S</code>続き<br><code>load address != link address</code>のときに、relocateを行う。<br>例えば、<code>load address = 0x00000000</code>、<code>link address = 0x80000000</code>を考える。\</p><ul><li>リンク時<ul><li><code>_start = 0x80000000</code></li><li><code>_fw_start = 0x80000000</code></li></ul></li><li>ロード時<ul><li><code>_start = 0x00000000</code></li><li><code>_fw_start = 0x00000000</code></li></ul></li></ul><p><code>_link_start</code>, <code>_load_start</code>は<code>_fw_start</code>自体の値を持っているため、リンク時の<code>_fw_start = 0x80000000</code>となる。<br><code>la</code>命令を用いたアドレス生成はauipc, addペアでPC-Relativeでアドレス生成がされるので、実行時のロードアドレスになる。</p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm>	<span class=nf>la</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>_load_start</span>			<span class=err>/</span><span class=p>*</span> <span class=no>t0</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_load_start</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>la</span>	<span class=no>t1</span><span class=p>,</span> <span class=no>_start</span>				<span class=err>/</span><span class=p>*</span> <span class=no>load</span> <span class=no>address</span> <span class=p>(</span><span class=no>PC-Relative</span><span class=p>)*</span><span class=err>/</span>
+	<span class=nf>REG_S</span>	<span class=no>t1</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t0</span><span class=p>)</span>			<span class=err>/</span><span class=p>*</span> <span class=p>*(</span><span class=no>_load_start</span><span class=p>)</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_start</span> <span class=p>*</span><span class=err>/</span>
+<span class=nl>_relocate:</span>
+	<span class=nf>la</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>_link_start</span>			<span class=err>/</span><span class=p>*</span> <span class=no>t0</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_link_start</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>REG_L</span>	<span class=no>t0</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t0</span><span class=p>)</span>			<span class=err>/</span><span class=p>*</span> <span class=no>t0</span> <span class=err>&lt;</span><span class=p>-</span> <span class=mi>0x80000000</span><span class=p>(</span><span class=no>_fw_start</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>la</span>	<span class=no>t1</span><span class=p>,</span> <span class=no>_link_end</span>			<span class=err>/</span><span class=p>*</span> <span class=no>t1</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_link_end</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>REG_L</span>	<span class=no>t1</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t1</span><span class=p>)</span>			<span class=err>/</span><span class=p>*</span> <span class=no>t1</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_fw_reloc_end</span><span class=p>(</span><span class=no>Link</span> <span class=no>Address</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>la</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>_load_start</span>			<span class=err>/</span><span class=p>*</span> <span class=no>t2</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_load_start</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>REG_L</span>	<span class=no>t2</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t2</span><span class=p>)</span>			<span class=err>/</span><span class=p>*</span> <span class=no>t2</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_0x00000000</span><span class=p>(</span><span class=no>_start</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=nf>calc</span> <span class=no>size</span> <span class=no>in</span> <span class=no>bytes</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>sub</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>t1</span><span class=p>,</span> <span class=no>t0</span>				<span class=err>/</span><span class=p>*</span> <span class=no>t3</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_fw_reloc_end</span><span class=p>(</span><span class=no>Link</span> <span class=no>Address</span><span class=p>)</span> <span class=p>-</span> <span class=no>_fw_start</span><span class=p>(</span><span class=no>Link</span> <span class=no>Address</span><span class=p>)*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=nf>calc</span> <span class=no>load_end</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>add</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>t2</span>				<span class=err>/</span><span class=p>*</span> <span class=no>t3</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>t3</span> <span class=err>+</span> <span class=no>_start</span><span class=p>(</span><span class=no>Load</span> <span class=no>Address</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>beq</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t2</span><span class=p>,</span> <span class=no>_relocate_done</span>	<span class=err>/</span><span class=p>*</span> <span class=no>if</span> <span class=no>link</span> <span class=no>address</span> <span class=err>==</span> <span class=no>load</span> <span class=no>address</span><span class=p>,</span> <span class=no>then</span> <span class=no>_relocate_done</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>la</span>	<span class=no>t4</span><span class=p>,</span> <span class=no>_relocate_done</span>
+	<span class=nf>sub</span>	<span class=no>t4</span><span class=p>,</span> <span class=no>t4</span><span class=p>,</span> <span class=no>t2</span>				<span class=err>/</span><span class=p>*</span> <span class=no>offset</span> <span class=no>of</span> <span class=no>_relocate_done</span> <span class=no>from</span> <span class=no>_start</span><span class=p>(</span><span class=no>load</span> <span class=no>address</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>add</span>	<span class=no>t4</span><span class=p>,</span> <span class=no>t4</span><span class=p>,</span> <span class=no>t0</span>				<span class=err>/</span><span class=p>*</span> <span class=no>link</span> <span class=no>address</span> <span class=no>of</span> <span class=no>_relocate_done</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=nf>if</span> <span class=no>load</span> <span class=no>address</span> <span class=err>&lt;</span> <span class=no>link</span> <span class=no>address</span> <span class=no>then</span> <span class=no>_relocate_copy_to_upper</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>blt</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>t0</span><span class=p>,</span> <span class=no>_relocate_copy_to_upper</span>
+<span class=nl>_relocate_copy_to_lower:</span>
+	<span class=nf>ble</span>	<span class=no>t1</span><span class=p>,</span> <span class=no>t2</span><span class=p>,</span> <span class=no>_relocate_copy_to_lower_loop</span>
+	<span class=nf>la</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>_relocate_lottery</span>
+	<span class=nf>BRANGE</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>t1</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>_start_hang</span>
+	<span class=nf>la</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>_boot_status</span>
+	<span class=nf>BRANGE</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>t1</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>_start_hang</span>
+	<span class=nf>la</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>_relocate</span>
+	<span class=nf>la</span>	<span class=no>t5</span><span class=p>,</span> <span class=no>_relocate_done</span>
+	<span class=nf>BRANGE</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>t1</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>_start_hang</span>
+	<span class=nf>BRANGE</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>t1</span><span class=p>,</span> <span class=no>t5</span><span class=p>,</span> <span class=no>_start_hang</span>
+	<span class=nf>BRANGE</span>  <span class=no>t3</span><span class=p>,</span> <span class=no>t5</span><span class=p>,</span> <span class=no>t2</span><span class=p>,</span> <span class=no>_start_hang</span>
+<span class=nl>_relocate_copy_to_lower_loop:</span>
+	<span class=nf>REG_L</span>	<span class=no>t3</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t2</span><span class=p>)</span>
+	<span class=nf>REG_S</span>	<span class=no>t3</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t0</span><span class=p>)</span>
+	<span class=nf>add</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t0</span><span class=p>,</span> <span class=no>__SIZEOF_POINTER__</span>
+	<span class=nf>add</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>t2</span><span class=p>,</span> <span class=no>__SIZEOF_POINTER__</span>
+	<span class=nf>blt</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t1</span><span class=p>,</span> <span class=no>_relocate_copy_to_lower_loop</span>
+	<span class=nf>jr</span>	<span class=no>t4</span>
+<span class=nl>_relocate_copy_to_upper:</span>
+	<span class=err>/*</span> <span class=nl>t3:</span> <span class=nf>load</span> <span class=no>end</span><span class=p>,</span> <span class=no>t0</span><span class=p>:</span> <span class=no>link</span> <span class=no>start</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=nf>if</span> <span class=no>t3</span> <span class=err>&lt;=</span> <span class=no>t0</span> <span class=no>then</span> <span class=no>_relocate_copy_to_upper_loop</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>ble</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>t0</span><span class=p>,</span> <span class=no>_relocate_copy_to_upper_loop</span>
+	<span class=err>/*</span> <span class=nf>t2</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_relocate_lottery</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=nf>_relocate_lottery</span> <span class=err>==</span> <span class=no>number</span> <span class=no>of</span> <span class=no>hart</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>la</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>_relocate_lottery</span>
+	<span class=err>/*</span> <span class=nf>if</span> <span class=no>not</span> <span class=no>_link_start</span> <span class=err>&lt;=</span> <span class=no>_relocate_lotttery</span> <span class=err>&amp;&amp;</span> <span class=no>_relocate_lottery</span> <span class=err>&lt;</span> <span class=no>_load_end</span><span class=p>,</span> <span class=no>jump</span> <span class=no>_start_hang</span><span class=p>*</span><span class=err>/</span>
+	<span class=nf>BRANGE</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>t2</span><span class=p>,</span> <span class=no>_start_hang</span>
+	<span class=nf>la</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>_boot_status</span>
+	<span class=err>/*</span> <span class=nf>if</span> <span class=no>not</span> <span class=no>_link_start</span> <span class=err>&lt;=</span> <span class=no>_boot_status</span> <span class=err>&amp;&amp;</span> <span class=no>_boot_status</span> <span class=err>&lt;</span> <span class=no>_load_end</span><span class=p>,</span> <span class=no>jump</span> <span class=no>_start_hang</span><span class=p>*</span><span class=err>/</span>
+	<span class=nf>BRANGE</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>t2</span><span class=p>,</span> <span class=no>_start_hang</span>
+	<span class=nf>la</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>_relocate</span>
+	<span class=nf>la</span>	<span class=no>t5</span><span class=p>,</span> <span class=no>_relocate_done</span>
+	<span class=err>/*</span> <span class=nf>if</span> <span class=no>not</span> <span class=no>_link_start</span> <span class=err>&lt;=</span> <span class=no>_relocate</span> <span class=err>&amp;&amp;</span> <span class=no>_relocate</span> <span class=err>&lt;</span> <span class=no>_load_end</span><span class=p>,</span> <span class=no>jump</span> <span class=no>_start_hang</span><span class=p>*</span><span class=err>/</span>
+	<span class=nf>BRANGE</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>t2</span><span class=p>,</span> <span class=no>_start_hang</span>
+	<span class=err>/*</span> <span class=nf>if</span> <span class=no>not</span> <span class=no>_link_start</span> <span class=err>&lt;=</span> <span class=no>_relocate_done</span> <span class=err>&amp;&amp;</span> <span class=no>_relocate_done</span> <span class=err>&lt;</span> <span class=no>_load_end</span><span class=p>,</span> <span class=no>jump</span> <span class=no>_start_hang</span><span class=p>*</span><span class=err>/</span>
+	<span class=nf>BRANGE</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>t5</span><span class=p>,</span> <span class=no>_start_hang</span>
+	<span class=err>/*</span> <span class=nf>if</span> <span class=no>not</span> <span class=no>_relocate</span> <span class=err>&lt;=</span> <span class=no>_link_start</span> <span class=err>&amp;&amp;</span> <span class=no>_link_start</span> <span class=err>&lt;</span> <span class=no>_relocate_done</span><span class=p>,</span> <span class=no>jump</span> <span class=no>_start_hang</span><span class=p>*</span><span class=err>/</span>
+	<span class=nf>BRANGE</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>t5</span><span class=p>,</span> <span class=no>t0</span><span class=p>,</span> <span class=no>_start_hang</span>
+<span class=nl>_relocate_copy_to_upper_loop:</span>
+	<span class=err>/*</span> <span class=nl>t3:</span> <span class=nf>load</span> <span class=no>end</span><span class=p>,</span> <span class=no>t1</span><span class=p>:</span> <span class=no>fw_reloc_end</span><span class=p>(</span><span class=no>link</span> <span class=no>end</span><span class=p>),</span> <span class=no>t0</span><span class=p>:</span> <span class=no>link</span> <span class=no>start</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>add</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=p>-</span><span class=no>__SIZEOF_POINTER__</span>				<span class=err>/</span><span class=p>*</span> <span class=no>t3</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>load</span> <span class=no>end</span> <span class=p>-</span> <span class=mi>4</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>add</span>	<span class=no>t1</span><span class=p>,</span> <span class=no>t1</span><span class=p>,</span> <span class=p>-</span><span class=no>__SIZEOF_POINTER__</span>				<span class=err>/</span><span class=p>*</span> <span class=no>t1</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>link</span> <span class=no>end</span> <span class=p>-</span> <span class=mi>4</span><span class=p>*</span><span class=err>/</span>
+	<span class=nf>REG_L</span>	<span class=no>t2</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t3</span><span class=p>)</span>							<span class=err>/</span><span class=p>*</span> <span class=no>t2</span> <span class=err>&lt;</span><span class=p>-</span> <span class=p>*(</span><span class=no>t3</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>REG_S</span>	<span class=no>t2</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t1</span><span class=p>)</span>							<span class=err>/</span><span class=p>*</span> <span class=p>*(</span><span class=no>t1</span><span class=p>)</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>t2</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>blt</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t1</span><span class=p>,</span> <span class=no>_relocate_copy_to_upper_loop</span>	<span class=err>/</span><span class=p>*</span> <span class=no>link</span> <span class=no>start</span> <span class=err>&lt;</span> <span class=no>link</span> <span class=no>end</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>jr</span>	<span class=no>t4</span>										<span class=err>/</span><span class=p>*</span> <span class=no>link</span> <span class=no>address</span> <span class=no>of</span> <span class=no>_relocate_done</span> <span class=p>*</span><span class=err>/</span>
+<span class=nl>_wait_relocate_copy_done:</span>
+	<span class=nf>la</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>_start</span>
+	<span class=nf>la</span>	<span class=no>t1</span><span class=p>,</span> <span class=no>_link_start</span>
+	<span class=nf>REG_L</span>	<span class=no>t1</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t1</span><span class=p>)</span>
+	<span class=nf>beq</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t1</span><span class=p>,</span> <span class=no>_wait_for_boot_hart</span>				<span class=err>/</span><span class=p>*</span> <span class=no>load</span> <span class=no>address</span> <span class=err>==</span> <span class=no>link</span> <span class=no>address</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>la</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>_boot_status</span>
+	<span class=nf>la</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>_wait_for_boot_hart</span>
+	<span class=err>/*</span> <span class=nf>relocate</span> <span class=no>load</span> <span class=no>address</span> <span class=no>of</span> <span class=no>_wait_for_boot_hart</span> <span class=no>to</span> <span class=no>link</span> <span class=no>address</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>sub</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>t0</span>
+	<span class=nf>add</span>	<span class=no>t3</span><span class=p>,</span> <span class=no>t3</span><span class=p>,</span> <span class=no>t1</span>
+<span class=err>1:</span>
+	<span class=err>/*</span> <span class=nf>waitting</span> <span class=no>for</span> <span class=no>relocate</span> <span class=no>copy</span> <span class=no>done</span> <span class=p>(</span><span class=no>_boot_status</span> <span class=err>==</span> <span class=mi>1</span><span class=p>)</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>li</span>	<span class=no>t4</span><span class=p>,</span> <span class=no>BOOT_STATUS_RELOCATE_DONE</span>
+	<span class=nf>REG_L</span>	<span class=no>t5</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t2</span><span class=p>)</span>		<span class=err>/</span><span class=p>*</span> <span class=no>t2</span> <span class=err>&lt;</span><span class=p>-</span> <span class=no>_boot_status</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>/*</span> <span class=nf>Reduce</span> <span class=no>the</span> <span class=no>bus</span> <span class=no>traffic</span> <span class=no>so</span> <span class=no>that</span> <span class=no>boot</span> <span class=no>hart</span> <span class=no>may</span> <span class=no>proceed</span> <span class=no>faster</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>nop</span>
+	<span class=nf>nop</span>
+	<span class=nf>nop</span>
+	<span class=err>/*</span> <span class=nf>t5</span> <span class=err>&lt;</span><span class=p>-</span> <span class=p>*(</span><span class=no>_boot_status</span><span class=p>)</span><span class=c>; t4 &lt;- BOOT_STATUS_RELOCATE_DONE; */
+</span><span class=c></span>	<span class=no>bgt</span>     <span class=no>t4</span><span class=p>,</span> <span class=no>t5</span><span class=p>,</span> <span class=mi>1</span><span class=no>b</span>
+	<span class=nf>jr</span>	<span class=no>t3</span>						<span class=err>/</span><span class=p>*</span> <span class=no>wait_for_boot_hart</span> <span class=p>*</span><span class=err>/</span>
+<span class=nl>_relocate_done:</span>
+	<span class=err>/*</span>
+	 <span class=err>*</span> <span class=nf>Mark</span> <span class=no>relocate</span> <span class=no>copy</span> <span class=no>done</span>
+	 <span class=err>*</span> <span class=nf>Use</span> <span class=no>_boot_status</span> <span class=no>copy</span> <span class=no>relative</span> <span class=no>to</span> <span class=no>the</span> <span class=no>load</span> <span class=no>address</span>
+	 <span class=err>*/</span>
+	<span class=nf>la</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>_boot_status</span>
+	<span class=nf>la</span>	<span class=no>t1</span><span class=p>,</span> <span class=no>_link_start</span>
+	<span class=nf>REG_L</span>	<span class=no>t1</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t1</span><span class=p>)</span>
+	<span class=nf>la</span>	<span class=no>t2</span><span class=p>,</span> <span class=no>_load_start</span>
+	<span class=nf>REG_L</span>	<span class=no>t2</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t2</span><span class=p>)</span>
+	<span class=nf>sub</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t0</span><span class=p>,</span> <span class=no>t1</span>
+	<span class=nf>add</span>	<span class=no>t0</span><span class=p>,</span> <span class=no>t0</span><span class=p>,</span> <span class=no>t2</span>
+	<span class=nf>li</span>	<span class=no>t1</span><span class=p>,</span> <span class=no>BOOT_STATUS_RELOCATE_DONE</span>
+	<span class=nf>REG_S</span>	<span class=no>t1</span><span class=p>,</span> <span class=mi>0</span><span class=p>(</span><span class=no>t0</span><span class=p>)</span>
+	<span class=nf>fence</span>	<span class=no>rw</span><span class=p>,</span> <span class=no>rw</span>
+<span class=na>...</span>
+</code></pre></div><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=na>...</span>
+<span class=nl>_load_start:</span>
+	<span class=nf>RISCV_PTR</span>	<span class=no>_fw_start</span>
+<span class=nl>_link_start:</span>
+	<span class=nf>RISCV_PTR</span>	<span class=no>_fw_start</span>
+<span class=nl>_link_end:</span>
+	<span class=nf>RISCV_PTR</span>	<span class=no>_fw_reloc_end</span>
+<span class=na>...</span>
+</code></pre></div><span class=image-container><span class=link><a href=./image01.png target=_blank><img class=img src=./image01.png></a></span></span><p>今回は、<code>_relocate_done</code>までにしておく。
+これ以降は、link addressになる。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/opensbi/>OpenSBI</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/opensbi/>OpenSBI</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part3/><span class="iconfont icon-article"></span>Reading OpenSBI part3</a></p><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part1/><span class="iconfont icon-article"></span>Reading OpenSBI part1</a></p></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>

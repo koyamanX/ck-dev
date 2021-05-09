@@ -1,275 +1,163 @@
-<!DOCTYPE html>
-<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.80.0" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<meta name="supported-color-schemes" content="light dark"><title>Reading OpenSBI part1&nbsp;&ndash;&nbsp;ck-dev</title><link rel="stylesheet" href="https://koyamanx.github.io/ck-dev/css/core.min.29e53d01c3a10193d6f0ba5a626eb9bce373d0c4f504382632032fec2c1ede3671afe8747d1025fbb5a35d5a52784fb1.css" integrity="sha384-KeU9AcOhAZPW8LpaYm65vONz0MT1BDgmMgMv7Cwe3jZxr&#43;h0fRAl&#43;7WjXVpSeE&#43;x"><meta name="twitter:card" content="summary" />
-<meta name="twitter:title" content="Reading OpenSBI part1" /><body><section id="header">
-    <div class="header wrap"><span class="header left-side"><a class="site home" href="https://koyamanx.github.io/ck-dev/"><span class="site name">ck-dev</span></a></span>
-        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="https://koyamanx.github.io/ck-dev/categories/">Categories</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/tags/">Tags</a><a class="nav item" href="https://koyamanx.github.io/ck-dev/about">About</a></nav></div></span></div><div class="site slogan"><span class="title">Notes for myself</span></div></section><section id="content"><div class="article-container"><section class="article header">
-    <h1 class="article title">Reading OpenSBI part1</h1><p class="article date">Tuesday, March 16, 2021</p></section><article class="article markdown-body"><h2 id="reading-opensbi">Reading OpenSBI</h2>
-<p>RISC-VのSBI実装の一つである、OpenSBIを読んでいく。
-今開発しているシステムでは、OpenSBIからLinux Kernelをロードし、制御を移しているため、理解しておきたい。</p>
-<h2 id="opensbiとは">OpenSBIとは</h2>
-<p>Open Source Supervisor Binary Interfaceの略である。\</p>
-<ul>
-<li><a href="https://github.com/riscv/opensbi"target="_blank" rel="noopener noreferrer">OpenSBI</a>
-</li>
-</ul>
-<h3 id="sbiとは">SBIとは</h3>
-<p>Supervisor Execution Environment(SEE)とSupervisorのインターフェースである。
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>Reading OpenSBI part1&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="Reading OpenSBI part1"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">Reading OpenSBI part1</h1><p class="article date">Tuesday, March 16, 2021</p></section><article class="article markdown-body"><h2 id=reading-opensbi>Reading OpenSBI</h2><p>RISC-VのSBI実装の一つである、OpenSBIを読んでいく。
+今開発しているシステムでは、OpenSBIからLinux Kernelをロードし、制御を移しているため、理解しておきたい。</p><h2 id=opensbiとは>OpenSBIとは</h2><p>Open Source Supervisor Binary Interfaceの略である。\</p><ul><li><a href=https://github.com/riscv/opensbi target=_blank rel="noopener noreferrer">OpenSBI</a></li></ul><h3 id=sbiとは>SBIとは</h3><p>Supervisor Execution Environment(SEE)とSupervisorのインターフェースである。
 つまり、Supervisorがより高位のモードの機能を使うためのインタフェースとなっている。
 Supervisorモードで、ecallを行うことでM-Modeへ遷移し、Supervisor callの処理を行う。
-Unix-like OSでは、OSはS-Modeで動作し、OpenSBIはM-Modeで動作しファームウェアのような(UEFIのような？)立ち位置で存在する。<br>
-OpenSBI自体はstatic libraryである。
-RISC-V Foundationに管理されており、SBI自体は以下で定義されている。</p>
-<ul>
-<li><a href="https://github.com/riscv/riscv-sbi-doc"target="_blank" rel="noopener noreferrer">SBI documentation</a>
-</li>
-</ul>
-<h2 id="firmware-types">Firmware types</h2>
-<ul>
-<li><a href="https://github.com/riscv/opensbi/blob/master/docs/firmware/fw.md"target="_blank" rel="noopener noreferrer">OpenSBI FW</a>
-</li>
-</ul>
-<p>ファームウェアのタイプとしては大きく分けて２つある。
+Unix-like OSでは、OSはS-Modeで動作し、OpenSBIはM-Modeで動作しファームウェアのような(UEFIのような？)立ち位置で存在する。<br>OpenSBI自体はstatic libraryである。
+RISC-V Foundationに管理されており、SBI自体は以下で定義されている。</p><ul><li><a href=https://github.com/riscv/riscv-sbi-doc target=_blank rel="noopener noreferrer">SBI documentation</a></li></ul><h2 id=firmware-types>Firmware types</h2><ul><li><a href=https://github.com/riscv/opensbi/blob/master/docs/firmware/fw.md target=_blank rel="noopener noreferrer">OpenSBI FW</a></li></ul><p>ファームウェアのタイプとしては大きく分けて２つある。
 OpenSBIから次段のブートローダーもしくはクライアントプログラム(OSやアプリケーション)を実行する際の違いがある。
 違いは雑に言えば、引数の渡しかたと初期化フローの違いくらいである。
-また、プラットフォームが違っても初期化のフローは基本的に同じである。</p>
-<ul>
-<li><a href="https://github.com/riscv/opensbi/blob/master/docs/firmware/fw_jump.md"target="_blank" rel="noopener noreferrer">FW_JUMP</a>
-
+また、プラットフォームが違っても初期化のフローは基本的に同じである。</p><ul><li><a href=https://github.com/riscv/opensbi/blob/master/docs/firmware/fw_jump.md target=_blank rel="noopener noreferrer">FW_JUMP</a>
 OpenSBIの次に実行されれるプログラムは、固定番地にロードされていると想定する。
 OpenSBIの初期化終了後には、固定番地へジャンプする。
 OpenSBIに直接リンクをしないため、ファームウェアの実行形式のサイズを小さくできる。
 OpenSBIより前段のブートローダーがOpenSBIとクライアントプログラムをロードすることができる場合は使える。
-例えば、前段のブートローダーが、SDカードからOpenSBIおよび次段のクライアントプログラムを固定番地へロードできる場合。</li>
-<li><a href="https://github.com/riscv/opensbi/blob/master/docs/firmware/fw_payload.md"target="_blank" rel="noopener noreferrer">FW_PAYLOAD</a>
-
+例えば、前段のブートローダーが、SDカードからOpenSBIおよび次段のクライアントプログラムを固定番地へロードできる場合。</li><li><a href=https://github.com/riscv/opensbi/blob/master/docs/firmware/fw_payload.md target=_blank rel="noopener noreferrer">FW_PAYLOAD</a>
 次段のクライアントプログラムのバイナリをOpenSBI自体にリンクする。
 初期ブートローダーがアプリケーションをロードできない場合などに便利である。
 直接リンクするため、実行形式のサイズは大きくなる。
-PAYLOADとしてクライアントプログラムを指定する。</li>
-<li><a href="https://github.com/riscv/opensbi/blob/master/docs/firmware/fw_dynamic.md"target="_blank" rel="noopener noreferrer">FW_DYNAMIC</a>
-
+PAYLOADとしてクライアントプログラムを指定する。</li><li><a href=https://github.com/riscv/opensbi/blob/master/docs/firmware/fw_dynamic.md target=_blank rel="noopener noreferrer">FW_DYNAMIC</a>
 次段のクライアントプログラムの情報を前段ブートローダーから受け取る。
-前段がOpenSBIと後段のクライアントプログラムをロードできる場合便利である。</li>
-</ul>
-<h2 id="パラメータ">パラメータ</h2>
-<ul>
-<li>FW_TEXT_ADDR
-OpenSBIの実行アドレス。</li>
-<li>FW\FDT_PATH
-FDTへのパス。OpenSBIの.rodataセクションにバイナリを組込み、次段のクライアントプログラムへ渡す。</li>
-<li>FW\FDT_PADDING
-FDTをゼロ埋めする。</li>
-</ul>
-<h2 id="opensbi-static-library">OpenSBI static library</h2>
-<p>2種類のライブラリが存在する。
-今回は、<code>libplatsbi.a</code>を使用する。そこで、OpenSBIをRV32XSoCに移植する。</p>
-<ul>
-<li>
-<p>libsbi.a</p>
-<p>SBIを提供するプラットフォーム非依存のライブラリである。プラットフォーム依存の処理フックはこのライブラリにリンクされるアプリケーションにより、
-提供する必要がある。<code>struct sbi_platform</code>のインスタンスにより、フラットフォーム依存処理のフックを設定する。</p>
-</li>
-<li>
-<p>libplatsbi.a</p>
-<p>OpenSBIにより、サポートされるプラットフォームに依存のライブラリ。</p>
-<ul>
-<li>
-<p>libsbiutils.a</p>
-<p>OpenSBIによりサポートされるプラットフォームの共通処理のライブラリ。</p>
-</li>
-</ul>
-</li>
-</ul>
-<p>詳しくはこちらを見るとよい。</p>
-<ul>
-<li><a href="https://github.com/riscv/opensbi/blob/master/docs/library_usage.md"target="_blank" rel="noopener noreferrer">library usage</a>
-</li>
-</ul>
-<h2 id="opensbiの移植">OpenSBIの移植</h2>
-<h3 id="requirementsの確認">requirementsの確認</h3>
-<p>OpenSBIに必要なRISC-Vの機能は以下にまとめられている。</p>
-<ul>
-<li><a href="https://github.com/riscv/opensbi/blob/master/docs/platform_requirements.md"target="_blank" rel="noopener noreferrer">platform requirements</a>
-</li>
-</ul>
-<h3 id="rv32xsoc">RV32XSoC</h3>
-<ul>
-<li>rv32ima</li>
-<li>one hart/one core(hartid is 0)</li>
-<li>support S-mode</li>
-<li>support MTVEC direct mode</li>
-</ul>
-<p>最低限の機能を満たしているため、OpenSBIの移植が可能である。
+前段がOpenSBIと後段のクライアントプログラムをロードできる場合便利である。</li></ul><h2 id=パラメータ>パラメータ</h2><ul><li>FW_TEXT_ADDR
+OpenSBIの実行アドレス。</li><li>FW\FDT_PATH
+FDTへのパス。OpenSBIの.rodataセクションにバイナリを組込み、次段のクライアントプログラムへ渡す。</li><li>FW\FDT_PADDING
+FDTをゼロ埋めする。</li></ul><h2 id=opensbi-static-library>OpenSBI static library</h2><p>2種類のライブラリが存在する。
+今回は、<code>libplatsbi.a</code>を使用する。そこで、OpenSBIをRV32XSoCに移植する。</p><ul><li><p>libsbi.a</p><p>SBIを提供するプラットフォーム非依存のライブラリである。プラットフォーム依存の処理フックはこのライブラリにリンクされるアプリケーションにより、
+提供する必要がある。<code>struct sbi_platform</code>のインスタンスにより、フラットフォーム依存処理のフックを設定する。</p></li><li><p>libplatsbi.a</p><p>OpenSBIにより、サポートされるプラットフォームに依存のライブラリ。</p><ul><li><p>libsbiutils.a</p><p>OpenSBIによりサポートされるプラットフォームの共通処理のライブラリ。</p></li></ul></li></ul><p>詳しくはこちらを見るとよい。</p><ul><li><a href=https://github.com/riscv/opensbi/blob/master/docs/library_usage.md target=_blank rel="noopener noreferrer">library usage</a></li></ul><h2 id=opensbiの移植>OpenSBIの移植</h2><h3 id=requirementsの確認>requirementsの確認</h3><p>OpenSBIに必要なRISC-Vの機能は以下にまとめられている。</p><ul><li><a href=https://github.com/riscv/opensbi/blob/master/docs/platform_requirements.md target=_blank rel="noopener noreferrer">platform requirements</a></li></ul><h3 id=rv32xsoc>RV32XSoC</h3><ul><li>rv32ima</li><li>one hart/one core(hartid is 0)</li><li>support S-mode</li><li>support MTVEC direct mode</li></ul><p>最低限の機能を満たしているため、OpenSBIの移植が可能である。
 また、今回のSoCでは、UARTはオリジナルの実装である。
 タイマー、ソフトウエア割込み源としてCLINT、外部割込みコントローラーとしてPLIC(M-mode, S-mode)を採用する。
-なお、ソフトウエア割込みはプロセッサ間の割込み(inter-processor interrupt)に用いられる。</p>
-<h3 id="移植">移植</h3>
-<p>OpenSBIの移植方法は以下にまとめられている。</p>
-<ul>
-<li><a href="https://github.com/riscv/opensbi/blob/master/docs/platform_guide.md"target="_blank" rel="noopener noreferrer">platform guide</a>
-</li>
-</ul>
-<p>基本的に、テンプレートのままでOKである(platform/template)。</p>
-<ul>
-<li>platform/template/config.mk</li>
-<li>platform/template/object.mk</li>
-<li>platform/template/platform.c</li>
-</ul>
-<p>config.mkにはOpenSBIのビルドオプションを記述する。<br>
-object.mkはそのまま使う。<br>
-platform.cにプラットフォーム依存のコードを書く。\</p>
-<p>UART関連および割込みコントローラー系ははSoC用に書く必要がある。<br>
-雑に言えば、<code>struct sbi_platform_operations</code>と<code>struct sbi_platform</code>の2つの構造体を提供すればよい。
+なお、ソフトウエア割込みはプロセッサ間の割込み(inter-processor interrupt)に用いられる。</p><h3 id=移植>移植</h3><p>OpenSBIの移植方法は以下にまとめられている。</p><ul><li><a href=https://github.com/riscv/opensbi/blob/master/docs/platform_guide.md target=_blank rel="noopener noreferrer">platform guide</a></li></ul><p>基本的に、テンプレートのままでOKである(platform/template)。</p><ul><li>platform/template/config.mk</li><li>platform/template/object.mk</li><li>platform/template/platform.c</li></ul><p>config.mkにはOpenSBIのビルドオプションを記述する。<br>object.mkはそのまま使う。<br>platform.cにプラットフォーム依存のコードを書く。\</p><p>UART関連および割込みコントローラー系ははSoC用に書く必要がある。<br>雑に言えば、<code>struct sbi_platform_operations</code>と<code>struct sbi_platform</code>の2つの構造体を提供すればよい。
 非依存のコードはこの構造体のインスタンスを通して、処理を実行したり、リソースへアクセスを行う。
-定義は<code>include/sbi/sbi_platform.h</code>にある。</p>
-<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="k">const</span> <span class="k">struct</span> <span class="n">sbi_platform_operations</span> <span class="n">platform_ops</span> <span class="o">=</span> <span class="p">{</span>
-	<span class="p">.</span><span class="n">early_init</span>		<span class="o">=</span> <span class="n">rv32xsoc_early_init</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">final_init</span>		<span class="o">=</span> <span class="n">rv32xsoc_final_init</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">console_putc</span>		<span class="o">=</span> <span class="n">rv32xsoc_console_putc</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">console_getc</span>		<span class="o">=</span> <span class="n">rv32xsoc_console_getc</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">console_init</span>		<span class="o">=</span> <span class="n">rv32xsoc_console_init</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">irqchip_init</span>		<span class="o">=</span> <span class="n">rv32xsoc_irqchip_init</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">ipi_send</span>		<span class="o">=</span> <span class="n">rv32xsoc_ipi_send</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">ipi_clear</span>		<span class="o">=</span> <span class="n">rv32xsoc_ipi_clear</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">ipi_init</span>		<span class="o">=</span> <span class="n">rv32xsoc_ipi_init</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">timer_value</span>		<span class="o">=</span> <span class="n">rv32xsoc_timer_value</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">timer_event_stop</span>	<span class="o">=</span> <span class="n">rv32xsoc_timer_event_stop</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">timer_event_start</span>	<span class="o">=</span> <span class="n">rv32xsoc_timer_event_start</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">timer_init</span>		<span class="o">=</span> <span class="n">rv32xsoc_timer_init</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">system_reset_check</span>	<span class="o">=</span> <span class="n">rv32xsoc_system_reset_check</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">system_reset</span>		<span class="o">=</span> <span class="n">rv32xsoc_system_reset</span>
-<span class="p">};</span>
-<span class="k">const</span> <span class="k">struct</span> <span class="n">sbi_platform</span> <span class="n">platform</span> <span class="o">=</span> <span class="p">{</span>
-	<span class="p">.</span><span class="n">opensbi_version</span>	<span class="o">=</span> <span class="n">OPENSBI_VERSION</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">platform_version</span>	<span class="o">=</span> <span class="n">SBI_PLATFORM_VERSION</span><span class="p">(</span><span class="mh">0x0</span><span class="p">,</span> <span class="mh">0x00</span><span class="p">),</span>
-	<span class="p">.</span><span class="n">name</span>			<span class="o">=</span> <span class="s">&#34;rv32xsoc-name&#34;</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">features</span>		<span class="o">=</span> <span class="n">SBI_PLATFORM_DEFAULT_FEATURES</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">hart_count</span>		<span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">hart_stack_size</span>	<span class="o">=</span> <span class="n">SBI_PLATFORM_DEFAULT_HART_STACK_SIZE</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">platform_ops_addr</span>	<span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="o">&amp;</span><span class="n">platform_ops</span>
-<span class="p">};</span>
-</code></pre></div><p>プラットフォーム依存で書く必要のありそうなコードは</p>
-<ul>
-<li><code>console_putc</code></li>
-<li><code>console_getc</code></li>
-<li><code>console_init</code></li>
-<li><code>irqchip_init</code></li>
-<li><code>ipi_init</code></li>
-</ul>
-<p>である。
+定義は<code>include/sbi/sbi_platform.h</code>にある。</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>const</span> <span class=k>struct</span> <span class=n>sbi_platform_operations</span> <span class=n>platform_ops</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>early_init</span>		<span class=o>=</span> <span class=n>rv32xsoc_early_init</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>final_init</span>		<span class=o>=</span> <span class=n>rv32xsoc_final_init</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>console_putc</span>		<span class=o>=</span> <span class=n>rv32xsoc_console_putc</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>console_getc</span>		<span class=o>=</span> <span class=n>rv32xsoc_console_getc</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>console_init</span>		<span class=o>=</span> <span class=n>rv32xsoc_console_init</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>irqchip_init</span>		<span class=o>=</span> <span class=n>rv32xsoc_irqchip_init</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>ipi_send</span>		<span class=o>=</span> <span class=n>rv32xsoc_ipi_send</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>ipi_clear</span>		<span class=o>=</span> <span class=n>rv32xsoc_ipi_clear</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>ipi_init</span>		<span class=o>=</span> <span class=n>rv32xsoc_ipi_init</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>timer_value</span>		<span class=o>=</span> <span class=n>rv32xsoc_timer_value</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>timer_event_stop</span>	<span class=o>=</span> <span class=n>rv32xsoc_timer_event_stop</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>timer_event_start</span>	<span class=o>=</span> <span class=n>rv32xsoc_timer_event_start</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>timer_init</span>		<span class=o>=</span> <span class=n>rv32xsoc_timer_init</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>system_reset_check</span>	<span class=o>=</span> <span class=n>rv32xsoc_system_reset_check</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>system_reset</span>		<span class=o>=</span> <span class=n>rv32xsoc_system_reset</span>
+<span class=p>};</span>
+<span class=k>const</span> <span class=k>struct</span> <span class=n>sbi_platform</span> <span class=n>platform</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>opensbi_version</span>	<span class=o>=</span> <span class=n>OPENSBI_VERSION</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>platform_version</span>	<span class=o>=</span> <span class=n>SBI_PLATFORM_VERSION</span><span class=p>(</span><span class=mh>0x0</span><span class=p>,</span> <span class=mh>0x00</span><span class=p>),</span>
+	<span class=p>.</span><span class=n>name</span>			<span class=o>=</span> <span class=s>&#34;rv32xsoc-name&#34;</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>features</span>		<span class=o>=</span> <span class=n>SBI_PLATFORM_DEFAULT_FEATURES</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>hart_count</span>		<span class=o>=</span> <span class=mi>1</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>hart_stack_size</span>	<span class=o>=</span> <span class=n>SBI_PLATFORM_DEFAULT_HART_STACK_SIZE</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>platform_ops_addr</span>	<span class=o>=</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kt>long</span><span class=p>)</span><span class=o>&amp;</span><span class=n>platform_ops</span>
+<span class=p>};</span>
+</code></pre></div><p>プラットフォーム依存で書く必要のありそうなコードは</p><ul><li><code>console_putc</code></li><li><code>console_getc</code></li><li><code>console_init</code></li><li><code>irqchip_init</code></li><li><code>ipi_init</code></li></ul><p>である。
 タイマー関連、ソフトウエア割込み関連はジェネリックなものを使用する。
 Sifiveの仕様に沿ったCLINTを用いているため、問題はないはず。
-また、システムリセットはサポートしない。</p>
-<p>コンソール系の関数は、単にブロッキングで入出力をすれば良い。</p>
-<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="k">static</span> <span class="kt">int</span> <span class="nf">rv32xsoc_console_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
-	<span class="k">return</span> <span class="n">rv32xsoc_uart_init</span><span class="p">();</span>
-<span class="p">}</span>
-<span class="k">static</span> <span class="kt">void</span> <span class="nf">rv32xsoc_console_putc</span><span class="p">(</span><span class="kt">char</span> <span class="n">ch</span><span class="p">)</span> <span class="p">{</span>
-	<span class="n">rv32xsoc_uart_putchar</span><span class="p">(</span><span class="n">ch</span><span class="p">);</span>
-<span class="p">}</span>
-<span class="k">static</span> <span class="kt">int</span> <span class="nf">rv32xsoc_console_getc</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
-	<span class="k">return</span> <span class="n">rv32xsoc_uart_getchar</span><span class="p">();</span>
-<span class="p">}</span>
+また、システムリセットはサポートしない。</p><p>コンソール系の関数は、単にブロッキングで入出力をすれば良い。</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kt>int</span> <span class=nf>rv32xsoc_console_init</span><span class=p>(</span><span class=kt>void</span><span class=p>)</span> <span class=p>{</span>
+	<span class=k>return</span> <span class=n>rv32xsoc_uart_init</span><span class=p>();</span>
+<span class=p>}</span>
+<span class=k>static</span> <span class=kt>void</span> <span class=nf>rv32xsoc_console_putc</span><span class=p>(</span><span class=kt>char</span> <span class=n>ch</span><span class=p>)</span> <span class=p>{</span>
+	<span class=n>rv32xsoc_uart_putchar</span><span class=p>(</span><span class=n>ch</span><span class=p>);</span>
+<span class=p>}</span>
+<span class=k>static</span> <span class=kt>int</span> <span class=nf>rv32xsoc_console_getc</span><span class=p>(</span><span class=kt>void</span><span class=p>)</span> <span class=p>{</span>
+	<span class=k>return</span> <span class=n>rv32xsoc_uart_getchar</span><span class=p>();</span>
+<span class=p>}</span>
 </code></pre></div><p><code>rv32x_soc_uart</code>系の関数たちは<code>opensbi/lib/utils/serial/rv32xsoc_uart.c</code>に記載する。
-ヘッダーファイルは<code>include/sbi_utils/serial/rv32xsoc_uart.h</code>に作成する。</p>
-<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="cp">#include</span> <span class="cpf">&lt;sbi_utils/serial/rv32xsoc_uart.h&gt;</span><span class="cp">
-</span><span class="cp"></span>
-<span class="kt">int</span> <span class="nf">rv32xsoc_uart_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
-	<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
-<span class="p">}</span>
-<span class="kt">int</span> <span class="nf">rv32xsoc_uart_putchar</span><span class="p">(</span><span class="kt">int</span> <span class="n">ch</span><span class="p">)</span> <span class="p">{</span>
+ヘッダーファイルは<code>include/sbi_utils/serial/rv32xsoc_uart.h</code>に作成する。</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#include</span> <span class=cpf>&lt;sbi_utils/serial/rv32xsoc_uart.h&gt;</span><span class=cp>
+</span><span class=cp></span>
+<span class=kt>int</span> <span class=nf>rv32xsoc_uart_init</span><span class=p>(</span><span class=kt>void</span><span class=p>)</span> <span class=p>{</span>
+	<span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+<span class=p>}</span>
+<span class=kt>int</span> <span class=nf>rv32xsoc_uart_putchar</span><span class=p>(</span><span class=kt>int</span> <span class=n>ch</span><span class=p>)</span> <span class=p>{</span>
 
-	<span class="k">while</span><span class="p">(</span><span class="n">RV32XSOC_UART_TX_GET_STAT_FULL</span><span class="p">())</span>
-		<span class="k">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&#34;nop&#34;</span><span class="p">);</span>
+	<span class=k>while</span><span class=p>(</span><span class=n>RV32XSOC_UART_TX_GET_STAT_FULL</span><span class=p>())</span>
+		<span class=k>asm</span> <span class=k>volatile</span><span class=p>(</span><span class=s>&#34;nop&#34;</span><span class=p>);</span>
 
-	<span class="o">*</span><span class="n">RV32XSOC_UART_TX_BUF</span> <span class="o">=</span> <span class="n">ch</span><span class="p">;</span>
-	<span class="n">RV32XSOC_UART_TX_SET_EN</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class=o>*</span><span class=n>RV32XSOC_UART_TX_BUF</span> <span class=o>=</span> <span class=n>ch</span><span class=p>;</span>
+	<span class=n>RV32XSOC_UART_TX_SET_EN</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
 
-	<span class="k">return</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="p">)</span> <span class="n">ch</span><span class="p">;</span>
-<span class="p">}</span>
+	<span class=k>return</span> <span class=p>(</span><span class=kt>unsigned</span> <span class=kt>int</span><span class=p>)</span> <span class=n>ch</span><span class=p>;</span>
+<span class=p>}</span>
 
-<span class="kt">int</span> <span class="nf">rv32xsoc_uart_getchar</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
-	<span class="kt">int</span> <span class="n">ch</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+<span class=kt>int</span> <span class=nf>rv32xsoc_uart_getchar</span><span class=p>(</span><span class=kt>void</span><span class=p>)</span> <span class=p>{</span>
+	<span class=kt>int</span> <span class=n>ch</span> <span class=o>=</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
 
-	<span class="n">RV32XSOC_UART_RX_SET_EN</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class=n>RV32XSOC_UART_RX_SET_EN</span><span class=p>(</span><span class=mi>1</span><span class=p>);</span>
 
-	<span class="cm">/* Blocking */</span>
-	<span class="k">while</span><span class="p">(</span><span class="n">RV32XSOC_UART_RX_GET_STAT_EMPTY</span><span class="p">())</span> <span class="p">{</span>
-		<span class="k">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">&#34;nop&#34;</span><span class="p">);</span>
-	<span class="p">}</span>
-	<span class="n">ch</span> <span class="o">=</span> <span class="o">*</span><span class="n">RV32XSOC_UART_RX_BUF</span><span class="p">;</span>
-	<span class="k">return</span> <span class="n">ch</span><span class="p">;</span>
-<span class="p">}</span>
-<span class="kt">void</span> <span class="nf">__attribute__</span><span class="p">((</span><span class="n">weak</span><span class="p">))</span> <span class="n">rv32xsoc_uart_rx_interrupt_handler</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
-<span class="p">}</span>
-<span class="kt">void</span> <span class="nf">__attribute__</span><span class="p">((</span><span class="n">weak</span><span class="p">))</span> <span class="n">rv32xsoc_uart_tx_interrupt_handler</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span> <span class="p">{</span>
-<span class="p">}</span>
-</code></pre></div><div class="highlight"><pre class="chroma"><code class="language-h" data-lang="h"><span class="cp">#ifndef RV32XSOC_UART_H
-</span><span class="cp">#define RV32XSOC_UART_TX_BUF ((volatile unsigned int *) 0x40000000)
-</span><span class="cp">#define RV32XSOC_UART_TX_STAT ((volatile unsigned int *) 0x40000004)
-</span><span class="cp"></span>
-<span class="cp">#define RV32XSOC_UART_RX_BUF ((volatile unsigned int *) 0x40000010)
-</span><span class="cp">#define RV32XSOC_UART_RX_STAT ((volatile unsigned int *) 0x40000014)
-</span><span class="cp"></span>
-<span class="cp">#define RV32XSOC_UART_TX_GET_STAT_FULL() (((*(RV32XSOC_UART_TX_STAT)) &amp; 0x00000008) &gt;&gt; 3)
-</span><span class="cp">#define RV32XSOC_UART_TX_GET_STAT_EMPTY() (((*(RV32XSOC_UART_TX_STAT)) &amp; 0x00000004) &gt;&gt; 2)
-</span><span class="cp">#define RV32XSOC_UART_TX_GET_STAT_BUSY() (((*(RV32XSOC_UART_TX_STAT)) &amp; 0x00000002) &gt;&gt; 1)
-</span><span class="cp">#define RV32XSOC_UART_TX_GET_STAT_EN() (((*(RV32XSOC_UART_TX_STAT)) &amp; 0x00000001))
-</span><span class="cp">#define RV32XSOC_UART_TX_SET_EN(en) (*(RV32XSOC_UART_TX_STAT) = *(RV32XSOC_UART_TX_STAT) | ((en) &amp; 0x1));
-</span><span class="cp"></span>
-<span class="cp">#define RV32XSOC_UART_RX_GET_STAT_FULL() (((*(RV32XSOC_UART_RX_STAT)) &amp; 0x00000008) &gt;&gt; 3)
-</span><span class="cp">#define RV32XSOC_UART_RX_GET_STAT_EMPTY() (((*(RV32XSOC_UART_RX_STAT)) &amp; 0x00000004) &gt;&gt; 2)
-</span><span class="cp">#define RV32XSOC_UART_RX_GET_STAT_BUSY() (((*(RV32XSOC_UART_RX_STAT)) &amp; 0x00000002) &gt;&gt; 1)
-</span><span class="cp">#define RV32XSOC_UART_RX_GET_STAT_EN() (((*(RV32XSOC_UART_RX_STAT)) &amp; 0x00000001))
-</span><span class="cp">#define RV32XSOC_UART_RX_SET_EN(en) (*(RV32XSOC_UART_RX_STAT) = *(RV32XSOC_UART_RX_STAT) | ((en) &amp; 0x1));
-</span><span class="cp"></span>
-<span class="k">typedef</span> <span class="k">union</span> <span class="p">{</span>
-	<span class="k">struct</span> <span class="p">{</span>
-		<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nl">en</span> <span class="p">:</span> <span class="mi">1</span><span class="p">;</span>	
-		<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nl">busy</span> <span class="p">:</span> <span class="mi">1</span><span class="p">;</span>	
-		<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nl">empty</span> <span class="p">:</span> <span class="mi">1</span><span class="p">;</span>
-		<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nl">full</span> <span class="p">:</span> <span class="mi">1</span><span class="p">;</span>
-		<span class="kt">unsigned</span> <span class="kt">int</span> <span class="nl">unused</span><span class="p">:</span> <span class="mi">28</span><span class="p">;</span>
-	<span class="p">}</span> <span class="n">stat</span><span class="p">;</span>
-	<span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">val</span><span class="p">;</span>
-<span class="p">}</span> <span class="n">rv32xsoc_uart_tx_stat_t</span><span class="p">;</span>
+	<span class=cm>/* Blocking */</span>
+	<span class=k>while</span><span class=p>(</span><span class=n>RV32XSOC_UART_RX_GET_STAT_EMPTY</span><span class=p>())</span> <span class=p>{</span>
+		<span class=k>asm</span> <span class=k>volatile</span><span class=p>(</span><span class=s>&#34;nop&#34;</span><span class=p>);</span>
+	<span class=p>}</span>
+	<span class=n>ch</span> <span class=o>=</span> <span class=o>*</span><span class=n>RV32XSOC_UART_RX_BUF</span><span class=p>;</span>
+	<span class=k>return</span> <span class=n>ch</span><span class=p>;</span>
+<span class=p>}</span>
+<span class=kt>void</span> <span class=nf>__attribute__</span><span class=p>((</span><span class=n>weak</span><span class=p>))</span> <span class=n>rv32xsoc_uart_rx_interrupt_handler</span><span class=p>(</span><span class=kt>void</span><span class=p>)</span> <span class=p>{</span>
+<span class=p>}</span>
+<span class=kt>void</span> <span class=nf>__attribute__</span><span class=p>((</span><span class=n>weak</span><span class=p>))</span> <span class=n>rv32xsoc_uart_tx_interrupt_handler</span><span class=p>(</span><span class=kt>void</span><span class=p>)</span> <span class=p>{</span>
+<span class=p>}</span>
+</code></pre></div><div class=highlight><pre class=chroma><code class=language-h data-lang=h><span class=cp>#ifndef RV32XSOC_UART_H
+</span><span class=cp>#define RV32XSOC_UART_TX_BUF ((volatile unsigned int *) 0x40000000)
+</span><span class=cp>#define RV32XSOC_UART_TX_STAT ((volatile unsigned int *) 0x40000004)
+</span><span class=cp></span>
+<span class=cp>#define RV32XSOC_UART_RX_BUF ((volatile unsigned int *) 0x40000010)
+</span><span class=cp>#define RV32XSOC_UART_RX_STAT ((volatile unsigned int *) 0x40000014)
+</span><span class=cp></span>
+<span class=cp>#define RV32XSOC_UART_TX_GET_STAT_FULL() (((*(RV32XSOC_UART_TX_STAT)) &amp; 0x00000008) &gt;&gt; 3)
+</span><span class=cp>#define RV32XSOC_UART_TX_GET_STAT_EMPTY() (((*(RV32XSOC_UART_TX_STAT)) &amp; 0x00000004) &gt;&gt; 2)
+</span><span class=cp>#define RV32XSOC_UART_TX_GET_STAT_BUSY() (((*(RV32XSOC_UART_TX_STAT)) &amp; 0x00000002) &gt;&gt; 1)
+</span><span class=cp>#define RV32XSOC_UART_TX_GET_STAT_EN() (((*(RV32XSOC_UART_TX_STAT)) &amp; 0x00000001))
+</span><span class=cp>#define RV32XSOC_UART_TX_SET_EN(en) (*(RV32XSOC_UART_TX_STAT) = *(RV32XSOC_UART_TX_STAT) | ((en) &amp; 0x1));
+</span><span class=cp></span>
+<span class=cp>#define RV32XSOC_UART_RX_GET_STAT_FULL() (((*(RV32XSOC_UART_RX_STAT)) &amp; 0x00000008) &gt;&gt; 3)
+</span><span class=cp>#define RV32XSOC_UART_RX_GET_STAT_EMPTY() (((*(RV32XSOC_UART_RX_STAT)) &amp; 0x00000004) &gt;&gt; 2)
+</span><span class=cp>#define RV32XSOC_UART_RX_GET_STAT_BUSY() (((*(RV32XSOC_UART_RX_STAT)) &amp; 0x00000002) &gt;&gt; 1)
+</span><span class=cp>#define RV32XSOC_UART_RX_GET_STAT_EN() (((*(RV32XSOC_UART_RX_STAT)) &amp; 0x00000001))
+</span><span class=cp>#define RV32XSOC_UART_RX_SET_EN(en) (*(RV32XSOC_UART_RX_STAT) = *(RV32XSOC_UART_RX_STAT) | ((en) &amp; 0x1));
+</span><span class=cp></span>
+<span class=k>typedef</span> <span class=k>union</span> <span class=p>{</span>
+	<span class=k>struct</span> <span class=p>{</span>
+		<span class=kt>unsigned</span> <span class=kt>int</span> <span class=nl>en</span> <span class=p>:</span> <span class=mi>1</span><span class=p>;</span>	
+		<span class=kt>unsigned</span> <span class=kt>int</span> <span class=nl>busy</span> <span class=p>:</span> <span class=mi>1</span><span class=p>;</span>	
+		<span class=kt>unsigned</span> <span class=kt>int</span> <span class=nl>empty</span> <span class=p>:</span> <span class=mi>1</span><span class=p>;</span>
+		<span class=kt>unsigned</span> <span class=kt>int</span> <span class=nl>full</span> <span class=p>:</span> <span class=mi>1</span><span class=p>;</span>
+		<span class=kt>unsigned</span> <span class=kt>int</span> <span class=nl>unused</span><span class=p>:</span> <span class=mi>28</span><span class=p>;</span>
+	<span class=p>}</span> <span class=n>stat</span><span class=p>;</span>
+	<span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>val</span><span class=p>;</span>
+<span class=p>}</span> <span class=n>rv32xsoc_uart_tx_stat_t</span><span class=p>;</span>
 
-<span class="k">typedef</span> <span class="n">rv32xsoc_uart_tx_stat_t</span> <span class="n">rv32xsoc_uart_rx_stat_t</span><span class="p">;</span>
+<span class=k>typedef</span> <span class=n>rv32xsoc_uart_tx_stat_t</span> <span class=n>rv32xsoc_uart_rx_stat_t</span><span class=p>;</span>
 
-<span class="kt">int</span> <span class="nf">rv32xsoc_uart_init</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
-<span class="kt">int</span> <span class="nf">rv32xsoc_uart_putchar</span><span class="p">(</span><span class="kt">int</span> <span class="n">ch</span><span class="p">);</span>
-<span class="kt">int</span> <span class="nf">rv32xsoc_uart_getchar</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+<span class=kt>int</span> <span class=nf>rv32xsoc_uart_init</span><span class=p>(</span><span class=kt>void</span><span class=p>);</span>
+<span class=kt>int</span> <span class=nf>rv32xsoc_uart_putchar</span><span class=p>(</span><span class=kt>int</span> <span class=n>ch</span><span class=p>);</span>
+<span class=kt>int</span> <span class=nf>rv32xsoc_uart_getchar</span><span class=p>(</span><span class=kt>void</span><span class=p>);</span>
 
-<span class="k">extern</span> <span class="nf">__attribute__</span><span class="p">((</span><span class="n">weak</span><span class="p">))</span> <span class="kt">void</span> <span class="n">rv32xsoc_uart_rx_interrupt_handler</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
-<span class="k">extern</span> <span class="nf">__attribute__</span><span class="p">((</span><span class="n">weak</span><span class="p">))</span> <span class="kt">void</span> <span class="n">rv32xsoc_uart_tx_interrupt_handler</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
-<span class="cp">#endif
+<span class=k>extern</span> <span class=nf>__attribute__</span><span class=p>((</span><span class=n>weak</span><span class=p>))</span> <span class=kt>void</span> <span class=n>rv32xsoc_uart_rx_interrupt_handler</span><span class=p>(</span><span class=kt>void</span><span class=p>);</span>
+<span class=k>extern</span> <span class=nf>__attribute__</span><span class=p>((</span><span class=n>weak</span><span class=p>))</span> <span class=kt>void</span> <span class=n>rv32xsoc_uart_tx_interrupt_handler</span><span class=p>(</span><span class=kt>void</span><span class=p>);</span>
+<span class=cp>#endif
 </span></code></pre></div><p>割込み系の関数を用意する。
 <code>irq</code>系がPLIC、<code>ipi</code>系がCLINTである。
-割込みソースの数やhartの数などはそれぞれ<code>struct plic_data</code>および<code>struct clint_data</code>にて記述する。</p>
-<div class="highlight"><pre class="chroma"><code class="language-c" data-lang="c"><span class="cp">#define RV32XSOC_PLIC_ADDR		0xc000000
-</span><span class="cp">#define RV32XSOC_PLIC_NUM_SOURCES	31
-</span><span class="cp">#define RV32XSOC_HART_COUNT		1
-</span><span class="cp">#define RV32XSOC_CLINT_ADDR		0x2000000
-</span><span class="cp"></span><span class="k">static</span> <span class="k">struct</span> <span class="n">plic_data</span> <span class="n">plic</span> <span class="o">=</span> <span class="p">{</span>
-	<span class="p">.</span><span class="n">addr</span> <span class="o">=</span> <span class="n">RV32XSOC_PLIC_ADDR</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">num_src</span> <span class="o">=</span> <span class="n">RV32XSOC_PLIC_NUM_SOURCES</span><span class="p">,</span>
-<span class="p">};</span>
-<span class="k">static</span> <span class="k">struct</span> <span class="n">clint_data</span> <span class="n">clint</span> <span class="o">=</span> <span class="p">{</span>
-	<span class="p">.</span><span class="n">addr</span> <span class="o">=</span> <span class="n">RV32XSOC_CLINT_ADDR</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">first_hartid</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">hart_count</span> <span class="o">=</span> <span class="n">RV32XSOC_HART_COUNT</span><span class="p">,</span>
-	<span class="p">.</span><span class="n">has_64bit_mmio</span> <span class="o">=</span> <span class="n">FALSE</span><span class="p">,</span>
-<span class="p">};</span>
-</code></pre></div><p>初期化やレジスタ参照はこの構造体をもとにジェネリックな処理を行う。</p>
-<p>これで移植は完了である。</p>
-<h2 id="ビルドする">ビルドする</h2>
-<p>FW_PAYLOAD、FW_DYNAMICとしてビルドする。
+割込みソースの数やhartの数などはそれぞれ<code>struct plic_data</code>および<code>struct clint_data</code>にて記述する。</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#define RV32XSOC_PLIC_ADDR		0xc000000
+</span><span class=cp>#define RV32XSOC_PLIC_NUM_SOURCES	31
+</span><span class=cp>#define RV32XSOC_HART_COUNT		1
+</span><span class=cp>#define RV32XSOC_CLINT_ADDR		0x2000000
+</span><span class=cp></span><span class=k>static</span> <span class=k>struct</span> <span class=n>plic_data</span> <span class=n>plic</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>addr</span> <span class=o>=</span> <span class=n>RV32XSOC_PLIC_ADDR</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>num_src</span> <span class=o>=</span> <span class=n>RV32XSOC_PLIC_NUM_SOURCES</span><span class=p>,</span>
+<span class=p>};</span>
+<span class=k>static</span> <span class=k>struct</span> <span class=n>clint_data</span> <span class=n>clint</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>addr</span> <span class=o>=</span> <span class=n>RV32XSOC_CLINT_ADDR</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>first_hartid</span> <span class=o>=</span> <span class=mi>0</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>hart_count</span> <span class=o>=</span> <span class=n>RV32XSOC_HART_COUNT</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>has_64bit_mmio</span> <span class=o>=</span> <span class=n>FALSE</span><span class=p>,</span>
+<span class=p>};</span>
+</code></pre></div><p>初期化やレジスタ参照はこの構造体をもとにジェネリックな処理を行う。</p><p>これで移植は完了である。</p><h2 id=ビルドする>ビルドする</h2><p>FW_PAYLOAD、FW_DYNAMICとしてビルドする。
 PAYLOADはビルド時に指定する。未指定にして、デフォルトのサンプルプログラムを使用する。
 ビルド時のパラメータは<code>opensbi/platform/rv32xsoc/config.mk</code>にある。
-以下に抜粋する。</p>
-<pre><code>platform-cppflags-y =
+以下に抜粋する。</p><pre><code>platform-cppflags-y =
 platform-cflags-y =
 platform-asflags-y =
 platform-ldflags-y =
@@ -284,21 +172,7 @@ FW_PAYLOAD=y
 FW_PAYLOAD_OFFSET=0x400000
 </code></pre><p>FW_PAYLOAD_OFFSETでPAYLOADのロードアドレスをFW_TEXT_STARTからのオフセットとして指定する。今回は<code>0x80000000+0x400000</code>番地にPAYLOADがロードされることとなる。
 ちなみに、OpenSBIは(ファームウェアなので)ベアメタル環境を前提としているので、ツールチェーンとしては、ベアメタル用の<code>riscv32-unknown-elf-</code>が必要となる。
-ツールのプリフィックスはビルド状況や環境によって違うが、<code>riscv32-unknown-linux-gnu-</code>でないことに注意。</p>
-<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">make <span class="nv">CROSS_COMPILE</span><span class="o">=</span>riscv32-unknown-elf- <span class="nv">PLATFORM</span><span class="o">=</span>rv32xsoc
-</code></pre></div><h2 id="実行">実行</h2>
-<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">clear<span class="p">;</span>./rv32x_simulation fw_payload.elf --no-sim-exit --no-log 2&gt;/dev/null
-</code></pre></div><span class="image-container"><span class="link" ><a href="./image00.png" 
-        target="_blank"><img class="img" src="./image00.png"/></a></span>
-</span>
-<p>正しく動作した。
-次回はソースコードを読んでいく。</p></article><section class="article labels"><a class="category" href=https://koyamanx.github.io/ck-dev/categories/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/opensbi/>OpenSBI</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class="tag" href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.a8bf9f6f334e22a6002d9757880b6a18a0782dbe71c8c331ba76607d0b858aa3261a116797f86516d1a8b38a0cc107c7.js#pubid=x-1234567890" integrity="sha384-qL&#43;fbzNOIqYALZdXiAtqGKB4Lb5xyMMxunZgfQuFiqMmGhFnl/hlFtGos4oMwQfH"></script>
-</div>
-<div class="article bottom"><section class="article navigation"><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part2/"><span class="iconfont icon-article"></span>Reading OpenSBI part2</a></p><p><a class="link" href="https://koyamanx.github.io/ck-dev/blog/booting_linux_kernel_on_my_riscv_part1/"><span class="iconfont icon-article"></span>Booting linux kernel on my RISC-V part1</a></p></section></div></section><section id="footer"><div class="footer-wrap">
-    <p class="copyright">©2021 koyamanX</p>
-    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
-        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
-        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
-</section></body>
-
-</html>
+ツールのプリフィックスはビルド状況や環境によって違うが、<code>riscv32-unknown-linux-gnu-</code>でないことに注意。</p><div class=highlight><pre class=chroma><code class=language-bash data-lang=bash>make <span class=nv>CROSS_COMPILE</span><span class=o>=</span>riscv32-unknown-elf- <span class=nv>PLATFORM</span><span class=o>=</span>rv32xsoc
+</code></pre></div><h2 id=実行>実行</h2><div class=highlight><pre class=chroma><code class=language-bash data-lang=bash>clear<span class=p>;</span>./rv32x_simulation fw_payload.elf --no-sim-exit --no-log 2&gt;/dev/null
+</code></pre></div><span class=image-container><span class=link><a href=./image00.png target=_blank><img class=img src=./image00.png></a></span></span><p>正しく動作した。
+次回はソースコードを読んでいく。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/opensbi/>OpenSBI</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/opensbi/>OpenSBI</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part2/><span class="iconfont icon-article"></span>Reading OpenSBI part2</a></p><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/booting_linux_kernel_on_my_riscv_part1/><span class="iconfont icon-article"></span>Booting linux kernel on my RISC-V part1</a></p></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>
