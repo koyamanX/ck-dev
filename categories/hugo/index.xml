@@ -22,7 +22,7 @@ target="_blank">&lt;img class="img" src="./image00.png"/>&lt;/a>&lt;/span>
 今回は、実線の部分のみ実装する。
 なお、DTMに関してはほとんど前回までで実装が完了している。
 また、VJTAGおよびDTM、DMはTCK(VJTAGのクロックドメイン)で動作している。
-そこで、hart &amp;lt;-&amp;gt; DM間にクロッククロスドメインの機構を用意する。
+そこで、hart &amp;lt;-&amp;gt; DM間にクロックドメインクロッシングの機構を用意する。
 念の為記しておくが、System busへのアクセスは実装しないが、System busは&lt;code>m_clock&lt;/code>ドメインで動作している。
 &lt;span class="image-container">&lt;span class="link" >&lt;a href="./image01.png"
 target="_blank">&lt;img class="img" src="./image01.png"/>&lt;/a>&lt;/span>
