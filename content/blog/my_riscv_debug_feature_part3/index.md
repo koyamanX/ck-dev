@@ -635,6 +635,7 @@ module DE10 {
 
 #### ツールのビルド
 ```bash
+sudo apt install libftdi1-dev
 git clone --recursive https://github.com/koyamanX/riscv-debug #riscv-vjtag branch(by default)
 cd riscv-debug/riscv-openocd
 git submodule update --init --recursive
