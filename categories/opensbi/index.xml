@@ -620,7 +620,8 @@ VJTAGを用いたアクセスでないため、必ず失敗する。
 &lt;p>&lt;a href="https://github.com/koyamanX/riscv-debug"target="_blank" rel="noopener noreferrer">koyamanX/riscv-openocd&lt;/a>
 &lt;/p>
 &lt;h4 id="ツールのビルド">ツールのビルド&lt;/h4>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-bash" data-lang="bash">git clone --recursive https://github.com/koyamanX/riscv-debug &lt;span class="c1">#riscv-vjtag branch(by default)&lt;/span>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-bash" data-lang="bash">sudo apt install libftdi1-dev
+git clone --recursive https://github.com/koyamanX/riscv-debug &lt;span class="c1">#riscv-vjtag branch(by default)&lt;/span>
 &lt;span class="nb">cd&lt;/span> riscv-debug/riscv-openocd
 git submodule update --init --recursive
 ./bootstrap

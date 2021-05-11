@@ -517,7 +517,8 @@ VJTAGを用いたアクセスでないため、必ず失敗する。
 <span class=cp>#endif
 </span><span class=cp></span><span class=p>}</span>
 
-</code></pre></div><h3 id=動作確認>動作確認</h3><p><a href=https://github.com/koyamanX/riscv-debug target=_blank rel="noopener noreferrer">koyamanX/riscv-openocd</a></p><h4 id=ツールのビルド>ツールのビルド</h4><div class=highlight><pre class=chroma><code class=language-bash data-lang=bash>git clone --recursive https://github.com/koyamanX/riscv-debug <span class=c1>#riscv-vjtag branch(by default)</span>
+</code></pre></div><h3 id=動作確認>動作確認</h3><p><a href=https://github.com/koyamanX/riscv-debug target=_blank rel="noopener noreferrer">koyamanX/riscv-openocd</a></p><h4 id=ツールのビルド>ツールのビルド</h4><div class=highlight><pre class=chroma><code class=language-bash data-lang=bash>sudo apt install libftdi1-dev
+git clone --recursive https://github.com/koyamanX/riscv-debug <span class=c1>#riscv-vjtag branch(by default)</span>
 <span class=nb>cd</span> riscv-debug/riscv-openocd
 git submodule update --init --recursive
 ./bootstrap
