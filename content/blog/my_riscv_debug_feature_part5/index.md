@@ -4,7 +4,7 @@ date: 2021-05-10T22:21:40+09:00
 author: "@koyamanX"
 categories: ["RISC-V"]
 tags: ["RISC-V", "FPGA", "JTAG"]
-draft: true
+draft: false
 ---
 
 仕様を読んでいるが、よくわからない。
