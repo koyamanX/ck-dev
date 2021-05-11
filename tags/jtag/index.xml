@@ -436,15 +436,17 @@ target create &lt;span class="nv">$_TARGETNAME&lt;/span> riscv -endian &lt;span 
 &lt;span class="n">target_register_event_callback&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">log_target_callback_event_handler&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">);&lt;/span>
 &lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
 &lt;span class="p">}&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;p>ここでは、以下の順でコマンドと関数を実行する。
-0. &lt;code>init&lt;/code>
-0. &lt;code>adapter_init();&lt;/code>
-0. &lt;code>transport init&lt;/code>
-0. &lt;code>dap init&lt;/code>
-0. &lt;code>target_examine();&lt;/code>
-0. &lt;code>flash init&lt;/code>
-0. &lt;code>nand init&lt;/code>
-0. &lt;code>pld init&lt;/code>&lt;/p>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>ここでは、以下の順でコマンドと関数を実行する。&lt;/p>
+&lt;ol start="0">
+&lt;li>&lt;code>init&lt;/code>&lt;/li>
+&lt;li>&lt;code>adapter_init();&lt;/code>&lt;/li>
+&lt;li>&lt;code>transport init&lt;/code>&lt;/li>
+&lt;li>&lt;code>dap init&lt;/code>&lt;/li>
+&lt;li>&lt;code>target_examine();&lt;/code>&lt;/li>
+&lt;li>&lt;code>flash init&lt;/code>&lt;/li>
+&lt;li>&lt;code>nand init&lt;/code>&lt;/li>
+&lt;li>&lt;code>pld init&lt;/code>&lt;/li>
+&lt;/ol>
 &lt;p>&lt;code>init&lt;/code>では、&lt;code>riscv&lt;/code>固有の初期化をする。
 &lt;code>adapter_init()&lt;/code>, &lt;code>transport init&lt;/code>, &lt;code>dap init&lt;/code>でJTAGの初期化をしている？
 &lt;code>target_examine&lt;/code>では、&lt;code>RISC-V Debug DM&lt;/code>が存在し、正しいステータスを返すかテストしているっぽい。

@@ -471,15 +471,7 @@ target create <span class=nv>$_TARGETNAME</span> riscv -endian <span class=nv>$_
 
 	<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
 <span class=p>}</span>
-</code></pre></div><p>ここでは、以下の順でコマンドと関数を実行する。
-0. <code>init</code>
-0. <code>adapter_init();</code>
-0. <code>transport init</code>
-0. <code>dap init</code>
-0. <code>target_examine();</code>
-0. <code>flash init</code>
-0. <code>nand init</code>
-0. <code>pld init</code></p><p><code>init</code>では、<code>riscv</code>固有の初期化をする。
+</code></pre></div><p>ここでは、以下の順でコマンドと関数を実行する。</p><ol start=0><li><code>init</code></li><li><code>adapter_init();</code></li><li><code>transport init</code></li><li><code>dap init</code></li><li><code>target_examine();</code></li><li><code>flash init</code></li><li><code>nand init</code></li><li><code>pld init</code></li></ol><p><code>init</code>では、<code>riscv</code>固有の初期化をする。
 <code>adapter_init()</code>, <code>transport init</code>, <code>dap init</code>でJTAGの初期化をしている？
 <code>target_examine</code>では、<code>RISC-V Debug DM</code>が存在し、正しいステータスを返すかテストしているっぽい。
 次は、これらを詳しくみていく。
