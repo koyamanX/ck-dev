@@ -1,4 +1,455 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>setup on ck-dev</title><link>https://koyamanx.github.io/ck-dev/tags/setup/</link><description>Recent content in setup on ck-dev</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>©2021 koyamanX</copyright><lastBuildDate>Mon, 15 Mar 2021 06:40:17 +0900</lastBuildDate><atom:link href="https://koyamanx.github.io/ck-dev/tags/setup/index.xml" rel="self" type="application/rss+xml"/><item><title>My RISC-V debug feature part4</title><link>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part4/</link><pubDate>Sun, 09 May 2021 23:05:20 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part4/</guid><description>&lt;p>これから、DM(Debug Module)の実装をおこない、VJTAGを通して、OpenOCDと情報をやりとりできるかを確認していく。
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>setup on ck-dev</title><link>https://koyamanx.github.io/ck-dev/tags/setup/</link><description>Recent content in setup on ck-dev</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>©2021 koyamanX</copyright><lastBuildDate>Mon, 15 Mar 2021 06:40:17 +0900</lastBuildDate><atom:link href="https://koyamanx.github.io/ck-dev/tags/setup/index.xml" rel="self" type="application/rss+xml"/><item><title>My RISC-V debug feature part5</title><link>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part5/</link><pubDate>Mon, 10 May 2021 22:21:40 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part5/</guid><description>&lt;p>仕様を読んでいるが、よくわからない。
+hartselとかwindowみたいなのがあってよく分かりづらい。
+最小限の機能で、OpenOCDから制御できればいいので、
+OpenOCDの初期化フローを読んで、それに応答するようなDM(Debug Module)を作ってみる。&lt;/p>
+&lt;h2 id="openocdの初期化">OpenOCDの初期化&lt;/h2>
+&lt;p>&lt;code>src/openocd.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="cm">/* normally this is the main() function entry, but if OpenOCD is linked
+&lt;/span>&lt;span class="cm"> * into application, then this fn will not be invoked, but rather that
+&lt;/span>&lt;span class="cm"> * application will have it&amp;#39;s own implementation of main(). */&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="nf">openocd_main&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">argc&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">char&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">argv&lt;/span>&lt;span class="p">[])&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="cm">/* initialize commandline interface */&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">command_context&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">cmd_ctx&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">setup_command_handler&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">NULL&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">util_init&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">EXIT_FAILURE&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ioutil_init&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">EXIT_FAILURE&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">rtt_init&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">EXIT_FAILURE&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">LOG_OUTPUT&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;For bug reports, read&lt;/span>&lt;span class="se">\n\t&lt;/span>&lt;span class="s">&amp;#34;&lt;/span>
+&lt;span class="s">&amp;#34;http://openocd.org/doc/doxygen/bugs.html&amp;#34;&lt;/span>
+&lt;span class="s">&amp;#34;&lt;/span>&lt;span class="se">\n&lt;/span>&lt;span class="s">&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">command_context_mode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">COMMAND_CONFIG&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">command_set_output_handler&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">configuration_output_handler&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">server_host_os_entry&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="cm">/* Start the executable meat that can evolve into thread in future. */&lt;/span>
+&lt;span class="n">ret&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">openocd_thread&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">argc&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">argv&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">flash_free_all_banks&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="n">gdb_service_free&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="n">server_free&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="n">unregister_all_commands&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="cm">/* free all DAP and CTI objects */&lt;/span>
+&lt;span class="n">dap_cleanup_all&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="n">arm_cti_cleanup_all&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="n">adapter_quit&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="n">server_host_os_close&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="cm">/* Shutdown commandline interface */&lt;/span>
+&lt;span class="n">command_exit&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">rtt_exit&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="n">free_config&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_FAIL&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">EXIT_FAILURE&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">else&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_OK&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">exit_on_signal&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">ret&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="cm">/** OpenOCD runtime meat that can become single-thread in future. It parse
+&lt;/span>&lt;span class="cm"> * commandline, reads configuration, sets up the target and starts server loop.
+&lt;/span>&lt;span class="cm"> * Commandline arguments are passed into this function from openocd_main().
+&lt;/span>&lt;span class="cm"> */&lt;/span>
+&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">openocd_thread&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">int&lt;/span> &lt;span class="n">argc&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">char&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">argv&lt;/span>&lt;span class="p">[],&lt;/span> &lt;span class="k">struct&lt;/span> &lt;span class="n">command_context&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">parse_cmdline_args&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">argc&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">argv&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">server_preinit&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">ret&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">parse_config_file&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ret&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">ERROR_COMMAND_CLOSE_CONNECTION&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">server_quit&lt;/span>&lt;span class="p">();&lt;/span> &lt;span class="cm">/* gdb server may be initialized by -c init */&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span> &lt;span class="k">else&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ret&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">server_quit&lt;/span>&lt;span class="p">();&lt;/span> &lt;span class="cm">/* gdb server may be initialized by -c init */&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="n">ret&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">server_init&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_OK&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">init_at_startup&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">ret&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">command_run_line&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;init&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_OK&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">server_quit&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="n">ret&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">server_loop&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">last_signal&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">server_quit&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">last_signal&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">last_signal&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ret&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>openocd_thread&lt;/code>がメインになる様子。
+まず、command line argumentsをパースする。
+その後、コンフィグファイルをパースする。
+このコンフィグファイルは&lt;code>-f&lt;/code>オプションで渡されるものであり、コマンドを一行ずつ実行していく。&lt;/p>
+&lt;h2 id="コンフィグファイルのパースおよび実行">コンフィグファイルのパースおよび実行&lt;/h2>
+&lt;p>&lt;code>src/helper/configuration.c&lt;/code>&lt;/p>
+&lt;pre>&lt;code>int parse_config_file(struct command_context *cmd_ctx)
+{
+int retval;
+char **cfg;
+if (!config_file_names) {
+command_run_line(cmd_ctx, &amp;quot;script openocd.cfg&amp;quot;);
+return ERROR_OK;
+}
+cfg = config_file_names;
+while (*cfg) {
+retval = command_run_line(cmd_ctx, *cfg);
+if (retval != ERROR_OK)
+return retval;
+cfg++;
+}
+return ERROR_OK;
+}
+&lt;/code>&lt;/pre>&lt;p>&lt;code>tcl/target/rv32xsoc.cfg&lt;/code>の抜粋。&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-bash" data-lang="bash">...
+jtag newtap &lt;span class="nv">$_CHIPNAME&lt;/span> cpu -irlen &lt;span class="m">10&lt;/span> -expected-id &lt;span class="nv">$_FPGATAPID&lt;/span>
+target create &lt;span class="nv">$_TARGETNAME&lt;/span> riscv -endian &lt;span class="nv">$_ENDIAN&lt;/span> -chain-position &lt;span class="nv">$_TARGETNAME&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>parse_config_file&lt;/code>によりパースされ、一行ずつ実行する。
+ここでは、&lt;code>target_create&lt;/code>にフォーカスしてみていく。
+&lt;code>target create&lt;/code>のハンドラは以下のようになっている。&lt;/p>
+&lt;p>&lt;code>src/target/target.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="k">struct&lt;/span> &lt;span class="n">command_registration&lt;/span> &lt;span class="n">target_command_handlers&lt;/span>&lt;span class="p">[]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;targets&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">handle_targets_command&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_ANY&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;change current default target (one parameter) &amp;#34;&lt;/span>
+&lt;span class="s">&amp;#34;or prints table of all targets (no parameters)&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">usage&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;[target]&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;target&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_CONFIG&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;configure target&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">chain&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">target_subcommand_handlers&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">usage&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;enable_rtos_riscv&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">handle_enable_rtos_riscv_command&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_CONFIG&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">usage&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;enable_rtos_riscv&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;Allow the use of `-rtos riscv` for just a little longer, &amp;#34;&lt;/span>
+&lt;span class="s">&amp;#34;until it will be completely removed at the end of 2020.&amp;#34;&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="n">COMMAND_REGISTRATION_DONE&lt;/span>
+&lt;span class="p">};&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>つまり、&lt;code>target&lt;/code>命令の場合は次にくる引数がサブコマンドになる。
+サブコマンドは以下の通り。&lt;/p>
+&lt;p>&lt;code>src/target/target.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="k">struct&lt;/span> &lt;span class="n">command_registration&lt;/span> &lt;span class="n">target_subcommand_handlers&lt;/span>&lt;span class="p">[]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;init&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_CONFIG&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">handle_target_init_command&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;initialize targets&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">usage&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;create&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_CONFIG&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">jim_handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">jim_target_create&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">usage&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;name type &amp;#39;-chain-position&amp;#39; name [options ...]&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;Creates and selects a new target&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;current&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_ANY&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">jim_handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">jim_target_current&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;Returns the currently selected target&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;types&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_ANY&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="n">jim_handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">jim_target_types&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;Returns the available target types as &amp;#34;&lt;/span> &lt;span class="s">&amp;#34;a list of strings&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">},&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;names&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_ANY&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">jim_handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">jim_target_names&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;Returns the names of all targets as a list of strings&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;smp&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_ANY&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">jim_handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">jim_target_smp&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">usage&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;targetname1 targetname2 ...&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;gather several target in a smp list&amp;#34;&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="n">COMMAND_REGISTRATION_DONE&lt;/span>
+&lt;span class="p">};&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>今回は&lt;code>target create&lt;/code>なので、&lt;code>jim_target_create&lt;/code>関数が呼ばれることになる。
+この関数では、命令の引数を準備し、&lt;code>target_create&lt;/code>を呼び出す。
+&lt;code>src/target/target.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">jim_target_create&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Jim_Interp&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">interp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">argc&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">Jim_Obj&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">argv&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="n">Jim_GetOptInfo&lt;/span> &lt;span class="n">goi&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">Jim_GetOpt_Setup&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">interp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">argc&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">argv&lt;/span> &lt;span class="o">+&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">argc&lt;/span> &lt;span class="o">&amp;lt;&lt;/span> &lt;span class="mi">3&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">Jim_WrongNumArgs&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">interp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">goi&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">argc&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">goi&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">argv&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="s">&amp;#34;&amp;lt;name&amp;gt; &amp;lt;target_type&amp;gt; [&amp;lt;target_options&amp;gt; ...]&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">JIM_ERR&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">target_create&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>target create&lt;/code>の引数を処理する。
+&lt;code>src/target/target.c:create_target&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">target_create&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">Jim_GetOptInfo&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="n">Jim_Obj&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">new_cmd&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">Jim_Cmd&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cmd&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">const&lt;/span> &lt;span class="kt">char&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cp&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">e&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">x&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">command_context&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">cmd_ctx&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">current_command_context&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">interp&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">assert&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">argc&lt;/span> &lt;span class="o">&amp;lt;&lt;/span> &lt;span class="mi">3&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">Jim_WrongNumArgs&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">interp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">goi&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">argv&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;?name? ?type? ..options...&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">JIM_ERR&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">...&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>src/target/target.c:create_target&lt;/code>続き&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c"> &lt;span class="cm">/* now does target type exist */&lt;/span>
+&lt;span class="k">for&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">x&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="p">;&lt;/span> &lt;span class="n">target_types&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">x&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="p">;&lt;/span> &lt;span class="n">x&lt;/span>&lt;span class="o">++&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="mi">0&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">strcmp&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target_types&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">x&lt;/span>&lt;span class="p">]&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">name&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="cm">/* found */&lt;/span>
+&lt;span class="k">break&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="cm">/* check for deprecated name */&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">target_types&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">x&lt;/span>&lt;span class="p">]&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">deprecated_name&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="mi">0&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">strcmp&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target_types&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">x&lt;/span>&lt;span class="p">]&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">deprecated_name&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="cm">/* found */&lt;/span>
+&lt;span class="n">LOG_WARNING&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;target name is deprecated use: &lt;/span>&lt;span class="se">\&amp;#39;&lt;/span>&lt;span class="s">%s&lt;/span>&lt;span class="se">\&amp;#39;&lt;/span>&lt;span class="s">&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target_types&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">x&lt;/span>&lt;span class="p">]&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">name&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">break&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>この部分で、以下のtclのriscvを処理している。
+&lt;code>target create $_TARGETNAME riscv -endian $_ENDIAN -chain-position $_TARGETNAME&lt;/code>
+&lt;code>target_types[]&lt;/code>から&lt;code>riscv&lt;/code>に対応する、ターゲットを探し出す。&lt;/p>
+&lt;p>&lt;code>src/target/target.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="k">struct&lt;/span> &lt;span class="n">target_type&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target_types&lt;/span>&lt;span class="p">[]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">arm7tdmi_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">arm9tdmi_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">arm920t_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">arm720t_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">...&lt;/span>
+&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">...&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>src/target/target.c:target_create&lt;/code>続き&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c"> &lt;span class="cm">/* Create it */&lt;/span>
+&lt;span class="n">target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">calloc&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">sizeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_ERROR&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Out of memory&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">JIM_ERR&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="cm">/* set target number */&lt;/span>
+&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">target_number&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">new_target_number&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="cm">/* allocate memory for each unique target type */&lt;/span>
+&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">type&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">malloc&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">sizeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">target_type&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">type&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_ERROR&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Out of memory&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">free&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">JIM_ERR&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="n">memcpy&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">type&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target_types&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">x&lt;/span>&lt;span class="p">],&lt;/span> &lt;span class="k">sizeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">target_type&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>target_configure&lt;/code>関数で&lt;code>-endian&lt;/code>や&lt;code>-chain-position&lt;/code>を処理をする。&lt;/p>
+&lt;p>&lt;code>src/target/target.c:target_create&lt;/code>続き&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c"> &lt;span class="n">e&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">target_configure&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">e&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">JIM_OK&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">has_dap&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dap_configured&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">Jim_SetResultString&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">interp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;-dap ?name? required when creating target&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">e&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">JIM_ERR&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span> &lt;span class="k">else&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap_configured&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">Jim_SetResultString&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">goi&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">interp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;-chain-position ?name? required when creating target&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">e&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">JIM_ERR&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="cm">/* tap must be set after target was configured */&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">e&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">JIM_ERR&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>また、この時点では(&lt;code>target_create&lt;/code>)、TAPが設定されていることが期待されている(&lt;code>-chain-position&lt;/code>で指定)。上のコードで確認している。&lt;/p>
+&lt;p>&lt;code>src/target/target.c:target_create&lt;/code>続き&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">type&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">target_create&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">e&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">type&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">target_create&lt;/span>&lt;span class="p">))(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">goi&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">interp&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">e&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;target_create failed&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">free&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">cmd_name&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">rtos_destroy&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">free&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">gdb_port_override&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">free&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">trace_info&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">free&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">type&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">free&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">JIM_ERR&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="cm">/* create the target specific commands */&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">type&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">commands&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">e&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">register_commands&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">type&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">commands&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_OK&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">e&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">LOG_ERROR&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;unable to register &amp;#39;%s&amp;#39; commands&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">cp&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>ここで、ターゲット(riscv)の&lt;code>target_create&lt;/code>を呼び出す。
+その後、ターゲットspecificなコマンドを登録する。&lt;/p>
+&lt;p>riscv用の&lt;code>target_create&lt;/code>を読んで見る。&lt;/p>
+&lt;p>以下が&lt;code>target_types&lt;/code>から取り出した、ターゲットspecificな構造体の実態である。
+&lt;code>../src/target/riscv/riscv.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">struct&lt;/span> &lt;span class="n">target_type&lt;/span> &lt;span class="n">riscv_target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;riscv&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">target_create&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">riscv_create_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">init_target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">riscv_init_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">deinit_target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">riscv_deinit_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">examine&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">riscv_examine&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>riscv_create_target&lt;/code>が呼び出されることになる。
+&lt;code>../src/target/riscv/riscv.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">riscv_create_target&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">Jim_Interp&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">interp&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;riscv_create_target()&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">arch_info&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">calloc&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">sizeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">riscv_info_t&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">arch_info&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">riscv_info_init&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">arch_info&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>../src/target/riscv/riscv.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="cm">/*** RISC-V Interface ***/&lt;/span>
+&lt;span class="kt">void&lt;/span> &lt;span class="nf">riscv_info_init&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">riscv_info_t&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="n">memset&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">sizeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">*&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dtm_version&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">registers_initialized&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">false&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">current_hartid&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">coreid&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">version_specific&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">memset&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">trigger_unique_id&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mh">0xff&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">sizeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">trigger_unique_id&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">xlen&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">mem_access_methods&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">RISCV_MEM_ACCESS_PROGBUF&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">mem_access_methods&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">RISCV_MEM_ACCESS_SYSBUS&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">mem_access_methods&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">RISCV_MEM_ACCESS_ABSTRACT&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">mem_access_progbuf_warn&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">true&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">mem_access_sysbus_warn&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">true&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">mem_access_abstract_warn&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">true&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">INIT_LIST_HEAD&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">expose_csr&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">INIT_LIST_HEAD&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">r&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">expose_custom&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="initコマンド">initコマンド&lt;/h2>
+&lt;p>ターゲットの作成が終わったら、サーバーを建てる。
+そのあと、&lt;code>init&lt;/code>コマンドを実行する。&lt;/p>
+&lt;p>&lt;code>src/openocd.c:openocd_thread&lt;/code>抜粋&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c"> &lt;span class="n">ret&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">server_init&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_OK&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">init_at_startup&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">ret&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">command_run_line&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;init&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_OK&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ret&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">server_quit&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>src/openocd.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="k">struct&lt;/span> &lt;span class="n">command_registration&lt;/span> &lt;span class="n">openocd_command_handlers&lt;/span>&lt;span class="p">[]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;version&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">jim_handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">jim_version_command&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_ANY&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;show program version&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;noinit&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">handle_noinit_command&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_CONFIG&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;Prevent &amp;#39;init&amp;#39; from being called at startup.&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">usage&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;init&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">handle_init_command&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_ANY&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;Initializes configured targets and servers. &amp;#34;&lt;/span>
+&lt;span class="s">&amp;#34;Changes command mode from CONFIG to EXEC. &amp;#34;&lt;/span>
+&lt;span class="s">&amp;#34;Unless &amp;#39;noinit&amp;#39; is called, this command is &amp;#34;&lt;/span>
+&lt;span class="s">&amp;#34;called automatically at the end of startup.&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">usage&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;&amp;#34;&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;add_script_search_dir&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">handler&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">handle_add_script_search_dir_command&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">mode&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">COMMAND_ANY&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">help&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;dir to search for config files and scripts&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">usage&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;&amp;lt;directory&amp;gt;&amp;#34;&lt;/span>
+&lt;span class="p">},&lt;/span>
+&lt;span class="n">COMMAND_REGISTRATION_DONE&lt;/span>
+&lt;span class="p">};&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>init&lt;/code>コマンドは&lt;code>handle_init_command&lt;/code>が対処する。&lt;/p>
+&lt;p>&lt;code>src/openocd.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="cm">/* OpenOCD can&amp;#39;t really handle failure of this command. Patches welcome! :-) */&lt;/span>
+&lt;span class="n">COMMAND_HANDLER&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">handle_init_command&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">CMD_ARGC&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_COMMAND_SYNTAX_ERROR&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">retval&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">initialized&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">initialized&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">initialized&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">retval&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">command_run_line&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;target init&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_OK&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">retval&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">retval&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">adapter_init&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">retval&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="cm">/* we must be able to set up the debug adapter */&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">retval&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Debug Adapter init complete&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="cm">/* &amp;#34;transport init&amp;#34; verifies the expected devices are present;
+&lt;/span>&lt;span class="cm"> * for JTAG, it checks the list of configured TAPs against
+&lt;/span>&lt;span class="cm"> * what&amp;#39;s discoverable, possibly with help from the platform&amp;#39;s
+&lt;/span>&lt;span class="cm"> * JTAG event handlers. (which require COMMAND_EXEC)
+&lt;/span>&lt;span class="cm"> */&lt;/span>
+&lt;span class="n">command_context_mode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">COMMAND_EXEC&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">retval&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">command_run_line&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;transport init&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_OK&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">retval&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">retval&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">command_run_line&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;dap init&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">ERROR_OK&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">retval&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Examining targets...&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">target_examine&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;target examination failed&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">command_context_mode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">COMMAND_CONFIG&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">command_run_line&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;flash init&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">command_run_line&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;nand init&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">command_run_line&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;pld init&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">command_context_mode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">COMMAND_EXEC&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="cm">/* initialize telnet subsystem */&lt;/span>
+&lt;span class="n">gdb_target_add_all&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">all_targets&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">target_register_event_callback&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">log_target_callback_event_handler&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">CMD_CTX&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>ここでは、以下の順でコマンドと関数を実行する。
+0. &lt;code>init&lt;/code>
+0. &lt;code>adapter_init();&lt;/code>
+0. &lt;code>transport init&lt;/code>
+0. &lt;code>dap init&lt;/code>
+0. &lt;code>target_examine();&lt;/code>
+0. &lt;code>flash init&lt;/code>
+0. &lt;code>nand init&lt;/code>
+0. &lt;code>pld init&lt;/code>&lt;/p>
+&lt;p>&lt;code>init&lt;/code>では、&lt;code>riscv&lt;/code>固有の初期化をする。
+&lt;code>adapter_init()&lt;/code>, &lt;code>transport init&lt;/code>, &lt;code>dap init&lt;/code>でJTAGの初期化をしている？
+&lt;code>target_examine&lt;/code>では、&lt;code>RISC-V Debug DM&lt;/code>が存在し、正しいステータスを返すかテストしているっぽい。
+次は、これらを詳しくみていく。
+なお、&lt;code>flash init&lt;/code>、&lt;code>nand init&lt;/code>、&lt;code>pld init&lt;/code>は見なくて良さそうなのでとりあえず放置する。&lt;/p></description></item><item><title>My RISC-V debug feature part4</title><link>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part4/</link><pubDate>Sun, 09 May 2021 23:05:20 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part4/</guid><description>&lt;p>これから、DM(Debug Module)の実装をおこない、VJTAGを通して、OpenOCDと情報をやりとりできるかを確認していく。
 まずは、かんたんな実装から始める。
 参照しているspecのバージョンは&lt;code>v0.13&lt;/code>である。&lt;/p>
 &lt;h2 id="機能">機能&lt;/h2>
@@ -2879,291 +3330,4 @@ target="_blank">&lt;img class="img" src="./image02.png"/>&lt;/a>&lt;/span>
 &lt;li>&lt;a href="http://www.coins.tsukuba.ac.jp/~yas/coins/os2-2010/2011-01-25/"target="_blank" rel="noopener noreferrer">メモリ管理、アドレス空間、ページテーブル&lt;/a>
 &lt;/li>
 &lt;/ul>
-&lt;p>今回はこのくらいにしておく。次回から&lt;code>arch/riscv/mm/init.c&lt;/code>を読んでいく。&lt;/p></description></item><item><title>Reading linux kernel part1</title><link>https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part1/</link><pubDate>Mon, 22 Mar 2021 17:53:40 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part1/</guid><description>&lt;p>RISC-V portsのLinux Kernelを読んでいく。
-自作のRISC-V SoC向けに移植をすることを目標としている。&lt;/p>
-&lt;h2 id="boot-loaderopensbiによるlinuxのロード実行">Boot loader(OpenSBI)によるLinuxのロード・実行&lt;/h2>
-&lt;p>OpenSBIのFW_PAYLOADとして、Linux kernelをロードし、制御を移すこととする。
-また、SoCの情報はDevice Treeとして記述し、FDT(Flatten Device Tree)としてOpenSBIより引き渡す。&lt;/p>
-&lt;p>以下に、OpenSBIからLinuxをブートする際のメモリマップの概略図を示す。
-&lt;code>0x80400000&lt;/code>にLinux Kernelが配置されている。
-OpenSBIは&lt;code>a0&lt;/code>レジスタに&lt;code>mhartid&lt;/code>、&lt;code>a1&lt;/code>レジスタにFDT PAが格納されている。&lt;/p>
-&lt;p>以下のトラップはS-modeへdelegationされているので、Linuxによりハンドルされる。&lt;/p>
-&lt;ul>
-&lt;li>Supervisor Software Interrput&lt;/li>
-&lt;li>Supervisor Timer Interrput&lt;/li>
-&lt;li>Supervisor External Interrput&lt;/li>
-&lt;li>Environment Call From U Mode&lt;/li>
-&lt;li>Instruction Address Misaligned&lt;/li>
-&lt;li>Environment breakpoint&lt;/li>
-&lt;li>Instruction Page Fault&lt;/li>
-&lt;li>Load Page Fault&lt;/li>
-&lt;li>Store AMO Page Fault&lt;/li>
-&lt;/ul>
-&lt;p>それ以外のトラップはOpenSBI(M-mode)によりハンドルされる。
-また、early stageでは、SBIコールを用いてコンソール入出力を行う(&lt;code>earlycon=sbi&lt;/code>)。&lt;/p>
-&lt;span class="image-container">&lt;span class="link" >&lt;a href="./image00.png"
-target="_blank">&lt;img class="img" src="./image00.png"/>&lt;/a>&lt;/span>
-&lt;/span>
-&lt;h2 id="linux-kernel-entrypoint">Linux kernel entrypoint&lt;/h2>
-&lt;h3 id="linker-script">linker script&lt;/h3>
-&lt;p>linker scriptは&lt;code>arch/riscv/kernel/vmlinux.lds.S&lt;/code>である。
-マクロは&lt;code>include/asm-generic/vmlinux.lds.h&lt;/code>を参照。&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="c">#define LOAD_OFFSET PAGE_OFFSET
-&lt;/span>&lt;span class="c">#include &amp;lt;asm/vmlinux.lds.h&amp;gt;
-&lt;/span>&lt;span class="c">#include &amp;lt;asm/page.h&amp;gt;
-&lt;/span>&lt;span class="c">#include &amp;lt;asm/cache.h&amp;gt;
-&lt;/span>&lt;span class="c">#include &amp;lt;asm/thread_info.h&amp;gt;
-&lt;/span>&lt;span class="c">#include &amp;lt;asm/set_memory.h&amp;gt;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="c">#include &amp;lt;linux/sizes.h&amp;gt;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="nf">OUTPUT_ARCH&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">riscv&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">ENTRY&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">_start&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">jiffies&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="no">jiffies_64&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">SECTIONS&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Beginning&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">code&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">text&lt;/span> &lt;span class="no">segment&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="err">.&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="nf">LOAD_OFFSET&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">_start&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">HEAD_TEXT_SECTION&lt;/span>
-&lt;span class="err">.&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="nf">ALIGN&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">PAGE_SIZE&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">__init_begin&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">INIT_TEXT_SECTION&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">PAGE_SIZE&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">.&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="nf">ALIGN&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">8&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">__soc_early_init_table&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">__soc_early_init_table_start&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">KEEP&lt;/span>&lt;span class="p">(*(&lt;/span>&lt;span class="no">__soc_early_init_table&lt;/span>&lt;span class="p">))&lt;/span>
-&lt;span class="nf">__soc_early_init_table_end&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">}&lt;/span>
-&lt;span class="nf">__soc_builtin_dtb_table&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">__soc_builtin_dtb_table_start&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">KEEP&lt;/span>&lt;span class="p">(*(&lt;/span>&lt;span class="no">__soc_builtin_dtb_table&lt;/span>&lt;span class="p">))&lt;/span>
-&lt;span class="nf">__soc_builtin_dtb_table_end&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">}&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">we&lt;/span> &lt;span class="no">have&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">discard&lt;/span> &lt;span class="no">exit&lt;/span> &lt;span class="no">text&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">such&lt;/span> &lt;span class="no">at&lt;/span> &lt;span class="no">runtime&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">not&lt;/span> &lt;span class="no">link&lt;/span> &lt;span class="no">time&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="na">.exit.text&lt;/span> &lt;span class="p">:&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">EXIT_TEXT&lt;/span>
-&lt;span class="err">}&lt;/span>
-&lt;span class="na">.exit.data&lt;/span> &lt;span class="p">:&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">EXIT_DATA&lt;/span>
-&lt;span class="err">}&lt;/span>
-&lt;span class="nf">PERCPU_SECTION&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">L1_CACHE_BYTES&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">__init_end&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="err">.&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="nf">ALIGN&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">SECTION_ALIGN&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">.text&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">_text&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">_stext&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">TEXT_TEXT&lt;/span>
-&lt;span class="nf">SCHED_TEXT&lt;/span>
-&lt;span class="nf">CPUIDLE_TEXT&lt;/span>
-&lt;span class="nf">LOCK_TEXT&lt;/span>
-&lt;span class="nf">KPROBES_TEXT&lt;/span>
-&lt;span class="nf">ENTRY_TEXT&lt;/span>
-&lt;span class="nf">IRQENTRY_TEXT&lt;/span>
-&lt;span class="nf">SOFTIRQENTRY_TEXT&lt;/span>
-&lt;span class="err">*(&lt;/span>&lt;span class="na">.fixup&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">_etext&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">}&lt;/span>
-&lt;span class="nf">INIT_DATA_SECTION&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">16&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Start&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">data&lt;/span> &lt;span class="no">section&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">_sdata&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">RO_DATA&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">SECTION_ALIGN&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="na">.srodata&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="err">*(&lt;/span>&lt;span class="na">.srodata&lt;/span>&lt;span class="p">*)&lt;/span>
-&lt;span class="err">}&lt;/span>
-&lt;span class="nf">EXCEPTION_TABLE&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">0x10&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">.&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="nf">ALIGN&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">SECTION_ALIGN&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">_data&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">RW_DATA&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">L1_CACHE_BYTES&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PAGE_SIZE&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">THREAD_SIZE&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="na">.sdata&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">__global_pointer$&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span> &lt;span class="err">+&lt;/span> &lt;span class="mi">0x800&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="p">*(.&lt;/span>&lt;span class="no">sdata&lt;/span>&lt;span class="p">*)&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">End&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">data&lt;/span> &lt;span class="no">section&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">_edata&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">}&lt;/span>
-&lt;span class="nf">BSS_SECTION&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">PAGE_SIZE&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PAGE_SIZE&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="na">.rel.dyn&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="err">*(&lt;/span>&lt;span class="na">.rel.dyn&lt;/span>&lt;span class="p">*)&lt;/span>
-&lt;span class="err">}&lt;/span>
-&lt;span class="nf">_end&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">STABS_DEBUG&lt;/span>
-&lt;span class="nf">DWARF_DEBUG&lt;/span>
-&lt;span class="nf">DISCARDS&lt;/span>
-&lt;span class="err">}&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;span class="image-container">&lt;span class="link" >&lt;a href="./image01.png"
-target="_blank">&lt;img class="img" src="./image01.png"/>&lt;/a>&lt;/span>
-&lt;/span>
-&lt;h3 id="エントリーポイント">エントリーポイント&lt;/h3>
-&lt;p>Linux kernelのエントリーポイントは&lt;code>arch/riscv/kernel/head.S&lt;/code>の&lt;code>_start&lt;/code>シンボルである。&lt;/p>
-&lt;p>&lt;code>arch/riscv/kernel/head.S&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="nf">__HEAD&lt;/span>
-&lt;span class="nf">ENTRY&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">_start&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">Image&lt;/span> &lt;span class="no">header&lt;/span> &lt;span class="no">expected&lt;/span> &lt;span class="no">by&lt;/span> &lt;span class="no">Linux&lt;/span> &lt;span class="no">boot-loaders.&lt;/span> &lt;span class="no">The&lt;/span> &lt;span class="no">image&lt;/span> &lt;span class="no">header&lt;/span> &lt;span class="no">data&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">structure&lt;/span> &lt;span class="no">is&lt;/span> &lt;span class="no">described&lt;/span> &lt;span class="no">in&lt;/span> &lt;span class="no">asm&lt;/span>&lt;span class="err">/&lt;/span>&lt;span class="no">image.h.&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">Do&lt;/span> &lt;span class="no">not&lt;/span> &lt;span class="no">modify&lt;/span> &lt;span class="no">it&lt;/span> &lt;span class="no">without&lt;/span> &lt;span class="no">modifying&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">structure&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">all&lt;/span> &lt;span class="no">bootloaders&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">that&lt;/span> &lt;span class="no">expects&lt;/span> &lt;span class="no">this&lt;/span> &lt;span class="no">header&lt;/span> &lt;span class="no">format&lt;/span>&lt;span class="p">!!&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">jump&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">start&lt;/span> &lt;span class="no">kernel&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">j&lt;/span> &lt;span class="no">_start_kernel&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">reserved&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="na">.word&lt;/span> &lt;span class="mi">0&lt;/span>
-&lt;span class="na">.balign&lt;/span> &lt;span class="mi">8&lt;/span>
-&lt;span class="c">#if __riscv_xlen == 64
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/*&lt;/span> &lt;span class="nf">Image&lt;/span> &lt;span class="no">load&lt;/span> &lt;span class="no">offset&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">2&lt;/span>&lt;span class="no">MB&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="no">from&lt;/span> &lt;span class="no">start&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">RAM&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="na">.dword&lt;/span> &lt;span class="mi">0x200000&lt;/span>
-&lt;span class="c">#else
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/*&lt;/span> &lt;span class="nf">Image&lt;/span> &lt;span class="no">load&lt;/span> &lt;span class="no">offset&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">4&lt;/span>&lt;span class="no">MB&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="no">from&lt;/span> &lt;span class="no">start&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">RAM&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="na">.dword&lt;/span> &lt;span class="mi">0x400000&lt;/span>
-&lt;span class="c">#endif
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/*&lt;/span> &lt;span class="nf">Effective&lt;/span> &lt;span class="no">size&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">kernel&lt;/span> &lt;span class="no">image&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="na">.dword&lt;/span> &lt;span class="no">_end&lt;/span> &lt;span class="p">-&lt;/span> &lt;span class="no">_start&lt;/span>
-&lt;span class="na">.dword&lt;/span> &lt;span class="no">__HEAD_FLAGS&lt;/span>
-&lt;span class="na">.word&lt;/span> &lt;span class="no">RISCV_HEADER_VERSION&lt;/span>
-&lt;span class="na">.word&lt;/span> &lt;span class="mi">0&lt;/span>
-&lt;span class="na">.dword&lt;/span> &lt;span class="mi">0&lt;/span>
-&lt;span class="na">.ascii&lt;/span> &lt;span class="no">RISCV_IMAGE_MAGIC&lt;/span>
-&lt;span class="na">.balign&lt;/span> &lt;span class="mi">4&lt;/span>
-&lt;span class="na">.ascii&lt;/span> &lt;span class="no">RISCV_IMAGE_MAGIC2&lt;/span>
-&lt;span class="na">.word&lt;/span> &lt;span class="mi">0&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;p>なお、&lt;code>_start&lt;/code>シンボルの実体は&lt;code>riscv_image_header&lt;/code>構造体である。&lt;/p>
-&lt;p>&lt;code>arch/riscv/include/asm/image.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="nf">struct&lt;/span> &lt;span class="no">riscv_image_header&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">u32&lt;/span> &lt;span class="no">code0&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u32&lt;/span> &lt;span class="no">code1&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u64&lt;/span> &lt;span class="no">text_offset&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u64&lt;/span> &lt;span class="no">image_size&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u64&lt;/span> &lt;span class="no">flags&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u32&lt;/span> &lt;span class="no">version&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u32&lt;/span> &lt;span class="no">res1&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u64&lt;/span> &lt;span class="no">res2&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u64&lt;/span> &lt;span class="no">magic&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u32&lt;/span> &lt;span class="no">magic2&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">u32&lt;/span> &lt;span class="no">res3&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>code0&lt;/code>、&lt;code>code1&lt;/code>はRISC-Vの命令となっており、&lt;code>code0&lt;/code>は(&lt;code>j _start_kernel&lt;/code>)となっている。
-また、&lt;code>riscv_image_header&lt;/code>のmagicナンバーは以下のようになっている。&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="c">#define RISCV_IMAGE_MAGIC &amp;#34;RISCV\0\0\0&amp;#34;
-&lt;/span>&lt;span class="c">#define RISCV_IMAGE_MAGIC2 &amp;#34;RSC\x05&amp;#34;
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="_start_kernel">_start_kernel&lt;/h2>
-&lt;p>次に、&lt;code>_start_kernel&lt;/code>を読んでいく。&lt;/p>
-&lt;p>&lt;code>arch/riscv/kernel/head.S&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm"> &lt;span class="nf">__INIT&lt;/span>
-&lt;span class="nf">ENTRY&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">_start_kernel&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Mask&lt;/span> &lt;span class="no">all&lt;/span> &lt;span class="no">interrupts&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">csrw&lt;/span> &lt;span class="no">CSR_IE&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">zero&lt;/span>
-&lt;span class="nf">csrw&lt;/span> &lt;span class="no">CSR_IP&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">zero&lt;/span>
-&lt;span class="c">#ifdef CONFIG_RISCV_M_MODE
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="na">...&lt;/span>
-&lt;span class="c">#endif /* CONFIG_RISCV_M_MODE */
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/*&lt;/span> &lt;span class="nf">Load&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">global&lt;/span> &lt;span class="no">pointer&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="na">.option&lt;/span> &lt;span class="no">push&lt;/span>
-&lt;span class="na">.option&lt;/span> &lt;span class="no">norelax&lt;/span>
-&lt;span class="nf">la&lt;/span> &lt;span class="no">gp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">__global_pointer$&lt;/span>
-&lt;span class="na">.option&lt;/span> &lt;span class="no">pop&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">Disable&lt;/span> &lt;span class="no">FPU&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">detect&lt;/span> &lt;span class="no">illegal&lt;/span> &lt;span class="no">usage&lt;/span> &lt;span class="no">of&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">floating&lt;/span> &lt;span class="no">point&lt;/span> &lt;span class="no">in&lt;/span> &lt;span class="no">kernel&lt;/span> &lt;span class="no">space&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">li&lt;/span> &lt;span class="no">t0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">SR_FS&lt;/span>
-&lt;span class="nf">csrc&lt;/span> &lt;span class="no">CSR_STATUS&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">t0&lt;/span>
-&lt;span class="c">#ifdef CONFIG_SMP
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="na">...&lt;/span>
-&lt;span class="c">#endif
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="割込みをクリア">割込みをクリア&lt;/h3>
-&lt;p>OpenSBIを用いているため、&lt;code>CONFIG_RISCV_M_MODE&lt;/code>はdefineしていないので、スキップする。&lt;/p>
-&lt;h3 id="global-pointerの設定">global pointerの設定&lt;/h3>
-&lt;p>&lt;code>gp&lt;/code>に&lt;code>__global_pointer$&lt;/code>をロードするときはlinker relaxationを無効にする。
-FPUを無効にする。
-今回はシングルコアなので、&lt;code>CONFIG_SMP&lt;/code>はdefineしていないのでスキップ。&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm"> &lt;span class="err">/*&lt;/span> &lt;span class="nf">Pick&lt;/span> &lt;span class="no">one&lt;/span> &lt;span class="no">hart&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">run&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">main&lt;/span> &lt;span class="no">boot&lt;/span> &lt;span class="no">sequence&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">la&lt;/span> &lt;span class="no">a3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">hart_lottery&lt;/span>
-&lt;span class="nf">li&lt;/span> &lt;span class="no">a2&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">1&lt;/span>
-&lt;span class="nf">amoadd.w&lt;/span> &lt;span class="no">a3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">a2&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">a3&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">bnez&lt;/span> &lt;span class="no">a3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">.Lsecondary_start&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Clear&lt;/span> &lt;span class="no">BSS&lt;/span> &lt;span class="no">for&lt;/span> &lt;span class="no">flat&lt;/span> &lt;span class="no">non-ELF&lt;/span> &lt;span class="no">images&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">la&lt;/span> &lt;span class="no">a3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">__bss_start&lt;/span>
-&lt;span class="nf">la&lt;/span> &lt;span class="no">a4&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">__bss_stop&lt;/span>
-&lt;span class="nf">ble&lt;/span> &lt;span class="no">a4&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">a3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">clear_bss_done&lt;/span>
-&lt;span class="nl">clear_bss:&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">zero&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">a3&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">add&lt;/span> &lt;span class="no">a3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">a3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">RISCV_SZPTR&lt;/span>
-&lt;span class="nf">blt&lt;/span> &lt;span class="no">a3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">a4&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">clear_bss&lt;/span>
-&lt;span class="nl">clear_bss_done:&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Save&lt;/span> &lt;span class="no">hart&lt;/span> &lt;span class="no">ID&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">DTB&lt;/span> &lt;span class="no">physical&lt;/span> &lt;span class="no">address&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">mv&lt;/span> &lt;span class="no">s0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">a0&lt;/span>
-&lt;span class="nf">mv&lt;/span> &lt;span class="no">s1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">a1&lt;/span>
-&lt;span class="nf">la&lt;/span> &lt;span class="no">a2&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">boot_cpu_hartid&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">a0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">a2&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Initialize&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="no">tables&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">relocate&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">virtual&lt;/span> &lt;span class="no">addresses&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">la&lt;/span> &lt;span class="no">sp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">init_thread_union&lt;/span> &lt;span class="err">+&lt;/span> &lt;span class="no">THREAD_SIZE&lt;/span>
-&lt;span class="nf">mv&lt;/span> &lt;span class="no">a0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">s1&lt;/span>
-&lt;span class="nf">call&lt;/span> &lt;span class="no">setup_vm&lt;/span>
-&lt;span class="c">#ifdef CONFIG_MMU
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="nf">la&lt;/span> &lt;span class="no">a0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">early_pg_dir&lt;/span>
-&lt;span class="nf">call&lt;/span> &lt;span class="no">relocate&lt;/span>
-&lt;span class="c">#endif /* CONFIG_MMU */
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="boot-hartの選定">Boot hartの選定&lt;/h3>
-&lt;p>&lt;code>hart_lottery&lt;/code>を使ってlotteryを行い、boot hartを決定する。&lt;/p>
-&lt;h3 id="bssのゼロクリア">bssのゼロクリア&lt;/h3>
-&lt;p>次に&lt;code>__bss_start&lt;/code>から&lt;code>__bss_stop&lt;/code>までを0クリアする。
-これは、Linker script上のマクロ関数&lt;code>BSS_SECTION&lt;/code>を展開すると発見できる。
-それぞれ、&lt;code>.bss&lt;/code>セクションの先頭と最後のアドレスである。&lt;/p>
-&lt;h3 id="ブートローダーからの情報の保存">ブートローダーからの情報の保存&lt;/h3>
-&lt;p>次に、前段のブートローダーから受けた、mhartid(&lt;code>a0&lt;/code>)とFDT PA(&lt;code>a1&lt;/code>)を保存する。
-&lt;code>boot_cpu_hartid&lt;/code>にboot hartのmhartidを保存する。&lt;/p>
-&lt;h3 id="page-tableの初期化">page tableの初期化&lt;/h3>
-&lt;p>まず、&lt;code>sp&lt;/code>を初期化する。
-&lt;code>THREAD_SIZE&lt;/code>は&lt;code>arch/riscv/include/asm/thread_info.h&lt;/code>に定義がある。&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="err">/*&lt;/span> &lt;span class="nf">thread&lt;/span> &lt;span class="no">information&lt;/span> &lt;span class="no">allocation&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="c">#ifdef CONFIG_64BIT
-&lt;/span>&lt;span class="c">#define THREAD_SIZE_ORDER (2)
-&lt;/span>&lt;span class="c">#else
-&lt;/span>&lt;span class="c">#define THREAD_SIZE_ORDER (1)
-&lt;/span>&lt;span class="c">#endif
-&lt;/span>&lt;span class="c">#define THREAD_SIZE (PAGE_SIZE &amp;lt;&amp;lt; THREAD_SIZE_ORDER)
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>PAGE_SIZE&lt;/code>は&lt;code>arch/riscv/include/asm/page.h&lt;/code>に定義がある。&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="c">#define PAGE_SHIFT (12)
-&lt;/span>&lt;span class="c">#define PAGE_SIZE (_AC(1, UL) &amp;lt;&amp;lt; PAGE_SHIFT)
-&lt;/span>&lt;span class="c">#define PAGE_MASK (~(PAGE_SIZE - 1))
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>つまり、&lt;code>THREAD_SIZE&lt;/code>はRV32の場合、8192((0x1&amp;laquo;12)&amp;laquo;1)になる。&lt;/p>
-&lt;p>&lt;code>init_thread_union&lt;/code>はlinker scriptの&lt;code>RW_DATA&lt;/code>内の&lt;code>INIT_TASK_DATA&lt;/code>により定義される。
-定義をたどるのがめんどいので、&lt;code>arch/riscv/kernel/vmlinux.lds.S&lt;/code>を事前にpreprocess(&lt;code>arch/riscv/kernel/vmlinux.lds&lt;/code>)したものを用意した。
-&lt;code>arch/riscv/kernel/vmlinux.lds&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm"> &lt;span class="nf">_data&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="p">.&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="p">.&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="no">ALIGN&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="mi">1&lt;/span> &lt;span class="err">&amp;lt;&amp;lt;&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="mi">12&lt;/span>&lt;span class="p">)))&lt;/span>&lt;span class="c">; .data : AT(ADDR(.data) - 0xC0000000) { . = ALIGN(((1 &amp;lt;&amp;lt; (12)) &amp;lt;&amp;lt; (1))); __start_init_task = .; init_thread_union = .; init_stack = .; KEEP(*(.data..init_task)) KEEP(*(.data..init_thread_info)) . = __start_init_task + ((1 &amp;lt;&amp;lt; (12)) &amp;lt;&amp;lt; (1)); __end_init_task = .; . = ALIGN((1 &amp;lt;&amp;lt; (12))); __nosave_begin = .; *(.data..nosave) . = ALIGN((1 &amp;lt;&amp;lt; (12))); __nosave_end = .; . = ALIGN((1 &amp;lt;&amp;lt; (12))); *(.data..page_aligned) . = ALIGN((1 &amp;lt;&amp;lt; (12))); . = ALIGN((1 &amp;lt;&amp;lt; 6)); *(.data..cacheline_aligned) . = ALIGN((1 &amp;lt;&amp;lt; 6)); *(.data..read_mostly) . = ALIGN((1 &amp;lt;&amp;lt; 6)); *(.xiptext) *(.data) *(.ref.data) *(.data..shared_aligned) *(.data.unlikely) __start_once = .; *(.data.once) __end_once = .; . = ALIGN(32); *(__tracepoints) . = ALIGN(8); __start___dyndbg = .; KEEP(*(__dyndbg)) __stop___dyndbg = .; CONSTRUCTORS } . = ALIGN(8); __bug_table : AT(ADDR(__bug_table) - 0xC0000000) { __start___bug_table = .; KEEP(*(__bug_table)) __stop___bug_table = .; }
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>さらに面倒くさいので、kernelをnmして探す。&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-bash" data-lang="bash">$ nm vmlinux&lt;span class="p">|&lt;/span>grep init_thread_union
-c1400000 D init_thread_union
-&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>init_thread_union&lt;/code>のアドレスは、&lt;code>0xc1400000&lt;/code>である(Link Address)。&lt;/p>
-&lt;p>つまり、&lt;code>sp&lt;/code>は(&lt;code>0xc1400000 + 8192 = 0xc14002000&lt;/code>)(Link Address)となる。&lt;/p>
-&lt;p>ちなみに、&lt;code>init_thread_union&lt;/code>は&lt;code>include/linux/sched.h&lt;/code>て定義されている。
-&lt;code>include/linux/sched.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">union&lt;/span> &lt;span class="n">thread_union&lt;/span> &lt;span class="p">{&lt;/span>
-&lt;span class="cp">#ifndef CONFIG_ARCH_TASK_STRUCT_ON_STACK
-&lt;/span>&lt;span class="cp">&lt;/span> &lt;span class="k">struct&lt;/span> &lt;span class="n">task_struct&lt;/span> &lt;span class="n">task&lt;/span>&lt;span class="p">;&lt;/span>
-&lt;span class="cp">#endif
-&lt;/span>&lt;span class="cp">#ifndef CONFIG_THREAD_INFO_IN_TASK
-&lt;/span>&lt;span class="cp">&lt;/span> &lt;span class="k">struct&lt;/span> &lt;span class="n">thread_info&lt;/span> &lt;span class="n">thread_info&lt;/span>&lt;span class="p">;&lt;/span>
-&lt;span class="cp">#endif
-&lt;/span>&lt;span class="cp">&lt;/span> &lt;span class="kt">unsigned&lt;/span> &lt;span class="kt">long&lt;/span> &lt;span class="n">stack&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">THREAD_SIZE&lt;/span>&lt;span class="o">/&lt;/span>&lt;span class="k">sizeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">long&lt;/span>&lt;span class="p">)];&lt;/span>
-&lt;span class="p">};&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;p>つまり、スタックか、&lt;code>thread_info&lt;/code>構造体、&lt;code>task_struct&lt;/code>と共用でメモリ領域を使用する。
-今回の場合はスタックである。サイズは&lt;code>THREAD_SIZE&lt;/code>wordsなので、&lt;code>THREAD_SIZE&lt;/code>を&lt;code>init_thread_union&lt;/code>に加算することで、スタックの高位アドレスがわかる。&lt;/p>
-&lt;p>OpenSBIのロードアドレスは&lt;code>0x80000000&lt;/code>である。
-Linux kernelのOpenSBIからのロードオフセットは&lt;code>0x00400000&lt;/code>である。
-Linux kernelの開始のロードアドレスは&lt;code>0x80400000&lt;/code>である。
-Linux kernelの開始のリンクアドレスは&lt;code>0xc0000000&lt;/code>である。
-スタックのロードアドレスは&lt;code>0x81802000&lt;/code>となる。(&lt;code>0x80400000 + 0xc14002000 - 0xc0000000&lt;/code>)&lt;/p>
-&lt;p>&lt;span class="image-container">&lt;span class="link" >&lt;a href="./image02.png"
-target="_blank">&lt;img class="img" src="./image02.png"/>&lt;/a>&lt;/span>
-&lt;/span>
-第一引数(&lt;code>a0&lt;/code>)にFDT PAをセットして、&lt;code>setup_vm&lt;/code>関数を呼ぶ。&lt;/p>
-&lt;p>長くなってきたので、&lt;code>setup_vm&lt;/code>は次回にする。&lt;/p></description></item></channel></rss>
+&lt;p>今回はこのくらいにしておく。次回から&lt;code>arch/riscv/mm/init.c&lt;/code>を読んでいく。&lt;/p></description></item></channel></rss>
