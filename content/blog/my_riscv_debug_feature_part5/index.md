@@ -580,6 +580,7 @@ COMMAND_HANDLER(handle_init_command)
 }
 ```
 ここでは、以下の順でコマンドと関数を実行する。
+
 0. `init`
 0. `adapter_init();`
 0. `transport init`
