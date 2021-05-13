@@ -1,4 +1,262 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>hugo on ck-dev</title><link>https://koyamanx.github.io/ck-dev/tags/hugo/</link><description>Recent content in hugo on ck-dev</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>©2021 koyamanX</copyright><lastBuildDate>Mon, 15 Mar 2021 06:40:17 +0900</lastBuildDate><atom:link href="https://koyamanx.github.io/ck-dev/tags/hugo/index.xml" rel="self" type="application/rss+xml"/><item><title>My RISC-V debug feature part5</title><link>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part5/</link><pubDate>Mon, 10 May 2021 22:21:40 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part5/</guid><description>&lt;p>仕様を読んでいるが、よくわからない。
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>hugo on ck-dev</title><link>https://koyamanx.github.io/ck-dev/tags/hugo/</link><description>Recent content in hugo on ck-dev</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>©2021 koyamanX</copyright><lastBuildDate>Mon, 15 Mar 2021 06:40:17 +0900</lastBuildDate><atom:link href="https://koyamanx.github.io/ck-dev/tags/hugo/index.xml" rel="self" type="application/rss+xml"/><item><title>My RISC-V debug feature part6 (target examine, riscv examine)</title><link>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part6/</link><pubDate>Thu, 13 May 2021 23:02:58 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part6/</guid><description>&lt;p>今回も引き続き、OpenOCDのコードを読んでいく。
+&lt;code>target_examine&lt;/code>と&lt;code>riscv_examine&lt;/code>を読む。&lt;/p>
+&lt;h2 id="target_examine">target_examine&lt;/h2>
+&lt;p>&lt;code>src/target/target.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="cm">/* Targets that correctly implement init + examine, i.e.
+&lt;/span>&lt;span class="cm"> * no communication with target during init:
+&lt;/span>&lt;span class="cm"> *
+&lt;/span>&lt;span class="cm"> * XScale
+&lt;/span>&lt;span class="cm"> */&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="nf">target_examine&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="kt">void&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">retval&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">for&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">all_targets&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="p">;&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">next&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="cm">/* defer examination, but don&amp;#39;t skip it */&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">enabled&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">jtag_register_event_callback&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">jtag_enable_callback&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">continue&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">defer_examine&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">continue&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">retval2&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">target_examine_one&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">retval2&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_WARNING&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;target %s examination failed&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target_name&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;span class="n">retval&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">retval2&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">retval&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="cm">/* Equivalent Tcl code arp_examine_one is in src/target/startup.tcl
+&lt;/span>&lt;span class="cm"> * Keep in sync */&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="nf">target_examine_one&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="n">target_call_event_callbacks&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">TARGET_EVENT_EXAMINE_START&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">retval&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">type&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">examine&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">retval&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">target_call_event_callbacks&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">TARGET_EVENT_EXAMINE_FAIL&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">retval&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="n">target_call_event_callbacks&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">TARGET_EVENT_EXAMINE_END&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">jtag_enable_callback&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">enum&lt;/span> &lt;span class="n">jtag_event&lt;/span> &lt;span class="n">event&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">priv&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">priv&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">event&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">JTAG_TAP_EVENT_ENABLE&lt;/span> &lt;span class="o">||&lt;/span> &lt;span class="o">!&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">enabled&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">jtag_unregister_event_callback&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">jtag_enable_callback&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">target_examine_one&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>target_examine_one&lt;/code>にて、ターゲット固有の&lt;code>examine&lt;/code>を実行する。
+RISC-Vの場合を見ていく。&lt;/p>
+&lt;p>&lt;code>src/target/riscv/riscv.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">struct&lt;/span> &lt;span class="n">target_type&lt;/span> &lt;span class="n">riscv_target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;riscv&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">target_create&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">riscv_create_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">init_target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">riscv_init_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">deinit_target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">riscv_deinit_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">examine&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">riscv_examine&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>riscv用のtarget_type構造体の&lt;code>examine&lt;/code>の実態は&lt;code>riscv_examine&lt;/code>である。&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">riscv_examine&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;riscv_examine()&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">target_was_examined&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Target was already examined.&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">use_vjtag&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="nb">true&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;use_vjtag is enabled&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">riscv_tap_vjtag_init&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="cm">/* Don&amp;#39;t need to select dbus, since the first thing we do is read dtmcontrol. */&lt;/span>
+&lt;span class="n">RISCV_INFO&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">info&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">uint32_t&lt;/span> &lt;span class="n">dtmcontrol&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">dtmcontrol_scan&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;dtmcontrol=0x%x&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">dtmcontrol&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dtm_version&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">get_field&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">dtmcontrol&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">DTMCONTROL_VERSION&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34; version=0x%x&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dtm_version&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">target_type&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">tt&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">get_target_type&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">tt&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">result&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">tt&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">init_target&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">result&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">result&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">tt&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">examine&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>ここから、RISC-VのDMに対するアクセスが始まる。&lt;/p>
+&lt;h2 id="dmへのアクセス">DMへのアクセス&lt;/h2>
+&lt;p>なお、今回はVJTAGを用いてDMにアクセスをする。
+まず最初にアクセスするのは、&lt;code>dtmcontrol&lt;/code>である。&lt;/p>
+&lt;h3 id="dtmcontroldtmcs">dtmcontrol(dtmcs)&lt;/h3>
+&lt;p>&lt;code>dtmcontrol&lt;/code>には&lt;code>dtmcontrol_scan&lt;/code>関数を用いてアクセスをする。&lt;/p>
+&lt;p>&lt;code>src/target/riscv/riscv.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="n">uint8_t&lt;/span> &lt;span class="n">ir_dtmcontrol&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">4&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="n">DTMCONTROL&lt;/span>&lt;span class="p">};&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">scan_field&lt;/span> &lt;span class="n">select_dtmcontrol&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">in_value&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">out_value&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">ir_dtmcontrol&lt;/span>
+&lt;span class="p">};&lt;/span>
+&lt;span class="n">uint8_t&lt;/span> &lt;span class="n">ir_dbus&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">4&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="n">DBUS&lt;/span>&lt;span class="p">};&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">scan_field&lt;/span> &lt;span class="n">select_dbus&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">in_value&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">out_value&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">ir_dbus&lt;/span>
+&lt;span class="p">};&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>src/target/riscv/riscv.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="n">uint32_t&lt;/span> &lt;span class="nf">dtmcontrol_scan&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">uint32_t&lt;/span> &lt;span class="n">out&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">scan_field&lt;/span> &lt;span class="n">field&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">uint8_t&lt;/span> &lt;span class="n">in_value&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">4&lt;/span>&lt;span class="p">];&lt;/span>
+&lt;span class="n">uint8_t&lt;/span> &lt;span class="n">out_value&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">4&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="p">};&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">bscan_tunnel_ir_width&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">dtmcontrol_scan_via_bscan&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">out&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">buf_set_u32&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">out_value&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">32&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">out&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">use_vjtag&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">vjtag_vir_scan&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">select_dtmcontrol&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">out_value&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">]);&lt;/span>
+&lt;span class="k">else&lt;/span>
+&lt;span class="n">jtag_add_ir_scan&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">select_dtmcontrol&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">TAP_IDLE&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">field&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">num_bits&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">32&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">field&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">out_value&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">out_value&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">field&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">in_value&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">in_value&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">jtag_add_dr_scan&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">field&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">TAP_IDLE&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">use_vjtag&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="n">vjtag_vir_scan&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">select_dbus&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">out_value&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">]);&lt;/span>
+&lt;span class="k">else&lt;/span>
+&lt;span class="cm">/* Always return to dbus. */&lt;/span>
+&lt;span class="n">jtag_add_ir_scan&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">tap&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">select_dbus&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">TAP_IDLE&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="kt">int&lt;/span> &lt;span class="n">retval&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">jtag_execute_queue&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">retval&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_ERROR&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;failed jtag scan: %d&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">retval&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">retval&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="n">uint32_t&lt;/span> &lt;span class="n">in&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">buf_get_u32&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">field&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">in_value&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">32&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;DTMCONTROL: 0x%x -&amp;gt; 0x%x&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">out&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">in&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">in&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>まずは、VIRへDTMCONTROLを転送する。
+&lt;code>jtag_add_dr_scan(target-&amp;gt;tap, 1, &amp;amp;field, TAP_IDLE);&lt;/code>
+にて、DR scanを行い、DTMCONTROLの値を取得する。(32 bit)
+結果は、&lt;code>field&lt;/code>へ格納される。
+なお、終了後のTAP状態はIDLEとなる。&lt;/p>
+&lt;pre>&lt;code> if (use_vjtag)
+vjtag_vir_scan(target-&amp;gt;tap, select_dbus.out_value[0]);
+&lt;/code>&lt;/pre>&lt;p>この行では、DBUS(DMI)へVIRを変更している。
+&lt;code>int retval = jtag_execute_queue();&lt;/code>でJTAGのコマンドを実行する。&lt;/p>
+&lt;p>&lt;code>uint32_t in = buf_get_u32(field.in_value, 0, 32);&lt;/code>
+この行で、取得した、DTMCONTROLを取り出す。&lt;/p>
+&lt;p>&lt;code>dtmcs(dtmcontrol)&lt;/code>のレジスタの構成は以下のようになっている。
+&lt;span class="image-container">&lt;span class="link" >&lt;a href="./image00.png"
+target="_blank">&lt;img class="img" src="./image00.png"/>&lt;/a>&lt;/span>
+&lt;/span>
+&lt;code>version&lt;/code>フィールドを&lt;code>get_field&lt;/code>にて取り出す。&lt;/p>
+&lt;p>つぎに、&lt;code>get_target_type&lt;/code>を行い、ターゲットの種別を調べる。
+&lt;code>src/target/riscv/riscv.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="k">struct&lt;/span> &lt;span class="n">target_type&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="nf">get_target_type&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="n">riscv_info_t&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">info&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">riscv_info_t&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">arch_info&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">info&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_ERROR&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Target has not been initialized&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="k">switch&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dtm_version&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="k">case&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv011_target&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">case&lt;/span> &lt;span class="mi">1&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_target&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">default&lt;/span>&lt;span class="o">:&lt;/span>
+&lt;span class="n">LOG_ERROR&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Unsupported DTM version: %d&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dtm_version&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="nb">NULL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>バージョンに応じて、&lt;code>riscv013_target&lt;/code>, &lt;code>riscv011_target&lt;/code>を選択する。
+今回は、&lt;code>0b0001&lt;/code>としたので、riscv-debug-spec 0.13 and 1.0に準拠となる。&lt;/p>
+&lt;p>&lt;code>riscv-debug/src/dtm.h&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="cp">#define DTMCS_VERSION 4&amp;#39;b0001
+&lt;/span>&lt;span class="cp">#define DTMCS_ABITS 6&amp;#39;b100000
+&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>src/target/riscv/riscv.c:riscv_examine&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c"> &lt;span class="kt">int&lt;/span> &lt;span class="n">result&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">tt&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">init_target&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">result&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">result&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">tt&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">examine&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>つぎに、ターゲット(&lt;code>riscv_013&lt;/code>)固有な初期化を行う。
+その後、&lt;code>examine&lt;/code>をする。&lt;/p>
+&lt;p>&lt;code>riscv-013&lt;/code>固有の&lt;code>target_type&lt;/code>構造体は以下のとおりである。
+&lt;code>src/target/riscv/riscv-013.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">struct&lt;/span> &lt;span class="n">target_type&lt;/span> &lt;span class="n">riscv013_target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">name&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s">&amp;#34;riscv&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">init_target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">init_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">deinit_target&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">deinit_target&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">examine&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">examine&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">poll&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv_openocd_poll&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">halt&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv_halt&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">step&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv_openocd_step&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">assert_reset&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">assert_reset&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">deassert_reset&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">deassert_reset&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">write_memory&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">write_memory&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="p">.&lt;/span>&lt;span class="n">arch_state&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">arch_state&lt;/span>
+&lt;span class="p">};&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>src/target/riscv/riscv-013.c&lt;/code>&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">static&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="nf">init_target&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">struct&lt;/span> &lt;span class="n">command_context&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">cmd_ctx&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;span class="k">struct&lt;/span> &lt;span class="n">target&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="p">{&lt;/span>
+&lt;span class="n">LOG_DEBUG&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;init&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">RISCV_INFO&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">generic_info&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">get_register&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_get_register&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">set_register&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_set_register&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">get_register_buf&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_get_register_buf&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">set_register_buf&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_set_register_buf&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">select_current_hart&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_select_current_hart&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">is_halted&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_is_halted&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">resume_go&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_resume_go&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">step_current_hart&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_step_current_hart&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">on_halt&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_on_halt&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">resume_prep&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_resume_prep&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">halt_prep&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_halt_prep&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">halt_go&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_halt_go&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">on_step&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_on_step&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">halt_reason&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_halt_reason&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">read_debug_buffer&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_read_debug_buffer&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">write_debug_buffer&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_write_debug_buffer&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">execute_debug_buffer&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_execute_debug_buffer&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">fill_dmi_write_u64&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_fill_dmi_write_u64&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">fill_dmi_read_u64&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_fill_dmi_read_u64&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">fill_dmi_nop_u64&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_fill_dmi_nop_u64&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dmi_write_u64_bits&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_dmi_write_u64_bits&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">authdata_read&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_authdata_read&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">authdata_write&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_authdata_write&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dmi_read&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">dmi_read&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dmi_write&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">dmi_write&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">read_memory&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">read_memory&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">test_sba_config_reg&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_test_sba_config_reg&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">hart_count&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_hart_count&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">data_bits&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_data_bits&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">print_info&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">riscv013_print_info&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">version_specific&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">calloc&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">sizeof&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">riscv013_info_t&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">version_specific&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_FAIL&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">generic_info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">sample_memory&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">sample_memory&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">riscv013_info_t&lt;/span> &lt;span class="o">*&lt;/span>&lt;span class="n">info&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">get_info&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">progbufsize&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="o">-&lt;/span>&lt;span class="mi">1&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">dmi_busy_delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">bus_master_read_delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">bus_master_write_delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">ac_busy_delay&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="cm">/* Assume all these abstract commands are supported until we learn
+&lt;/span>&lt;span class="cm"> * otherwise.
+&lt;/span>&lt;span class="cm"> * TODO: The spec allows eg. one CSR to be able to be accessed abstractly
+&lt;/span>&lt;span class="cm"> * while another one isn&amp;#39;t. We don&amp;#39;t track that this closely here, but in
+&lt;/span>&lt;span class="cm"> * the future we probably should. */&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">abstract_read_csr_supported&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">true&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">abstract_write_csr_supported&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">true&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">abstract_read_fpr_supported&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">true&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">abstract_write_fpr_supported&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nb">true&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="n">info&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">has_aampostincrement&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">YNM_MAYBE&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="k">return&lt;/span> &lt;span class="n">ERROR_OK&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>init&lt;/code>では、&lt;code>riscv013&lt;/code>の処理用の関数を&lt;code>generic_info&lt;/code>構造体へセットしている。
+&lt;code>generic_info&lt;/code>のRISC-V Debug specのバージョン非依存なインターフェイスを提供する。&lt;/p>
+&lt;p>今日はここまで。
+次回は&lt;code>examine&lt;/code>を読んで、&lt;code>examine&lt;/code>の処理が通るようなDMを実装していく。&lt;/p></description></item><item><title>My RISC-V debug feature part5</title><link>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part5/</link><pubDate>Mon, 10 May 2021 22:21:40 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part5/</guid><description>&lt;p>仕様を読んでいるが、よくわからない。
 hartselとかwindowみたいなのがあってよく分かりづらい。
 最小限の機能で、OpenOCDから制御できればいいので、
 OpenOCDの初期化フローを読んで、それに応答するようなDM(Debug Module)を作ってみる。&lt;/p>
@@ -2939,397 +3197,4 @@ szが4KBの範囲ならPGDのエントリーをページテーブルを指すよ
 &lt;span class="p">}&lt;/span>
 &lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>pte_none&lt;/code>はPTEがNULLであることを確かめる。
 次に、ページテーブルにエントリーを挿入する。&lt;/p>
-&lt;p>とりあえず、ここまで。&lt;/p></description></item><item><title>Reading linux kernel part2</title><link>https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part2/</link><pubDate>Tue, 23 Mar 2021 13:48:04 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part2/</guid><description>&lt;p>&lt;code>setup_vm&lt;/code>を読んでいく。&lt;/p>
-&lt;h2 id="setup_vm">setup_vm&lt;/h2>
-&lt;p>&lt;code>arch/riscv/mm/init.c&lt;/code>&lt;/p>
-&lt;p>&lt;code>setup_vm&lt;/code>の段階では、load addressからlink addressへのリロケーションが終わっていないので&lt;code>PC-relative&lt;/code>なコード生成が必須である。&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="n">asmlinkage&lt;/span> &lt;span class="kt">void&lt;/span> &lt;span class="n">__init&lt;/span> &lt;span class="nf">setup_vm&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">uintptr_t&lt;/span> &lt;span class="n">dtb_pa&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="p">{&lt;/span>
-&lt;span class="n">uintptr_t&lt;/span> &lt;span class="n">va&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">end_va&lt;/span>&lt;span class="p">;&lt;/span>
-&lt;span class="n">uintptr_t&lt;/span> &lt;span class="n">load_pa&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">uintptr_t&lt;/span>&lt;span class="p">)(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">_start&lt;/span>&lt;span class="p">);&lt;/span>
-&lt;span class="n">uintptr_t&lt;/span> &lt;span class="n">load_sz&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">uintptr_t&lt;/span>&lt;span class="p">)(&lt;/span>&lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">_end&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">load_pa&lt;/span>&lt;span class="p">;&lt;/span>
-&lt;span class="n">uintptr_t&lt;/span> &lt;span class="n">map_size&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">best_map_size&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">load_pa&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">MAX_EARLY_MAPPING_SIZE&lt;/span>&lt;span class="p">);&lt;/span>
-&lt;span class="n">va_pa_offset&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">PAGE_OFFSET&lt;/span> &lt;span class="o">-&lt;/span> &lt;span class="n">load_pa&lt;/span>&lt;span class="p">;&lt;/span>
-&lt;span class="n">pfn_base&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">PFN_DOWN&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">load_pa&lt;/span>&lt;span class="p">);&lt;/span>
-&lt;span class="cm">/*
-&lt;/span>&lt;span class="cm"> * Enforce boot alignment requirements of RV32 and
-&lt;/span>&lt;span class="cm"> * RV64 by only allowing PMD or PGD mappings.
-&lt;/span>&lt;span class="cm"> */&lt;/span>
-&lt;span class="n">BUG_ON&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">map_size&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">PAGE_SIZE&lt;/span>&lt;span class="p">);&lt;/span>
-&lt;span class="cm">/* Sanity check alignment and size */&lt;/span>
-&lt;span class="n">BUG_ON&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="n">PAGE_OFFSET&lt;/span> &lt;span class="o">%&lt;/span> &lt;span class="n">PGDIR_SIZE&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">);&lt;/span>
-&lt;span class="n">BUG_ON&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="n">load_pa&lt;/span> &lt;span class="o">%&lt;/span> &lt;span class="n">map_size&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">);&lt;/span>
-&lt;span class="n">BUG_ON&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">load_sz&lt;/span> &lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">MAX_EARLY_MAPPING_SIZE&lt;/span>&lt;span class="p">);&lt;/span>
-&lt;span class="cm">/* Setup early PGD for fixmap */&lt;/span>
-&lt;span class="n">create_pgd_mapping&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">early_pg_dir&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">FIXADDR_START&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="p">(&lt;/span>&lt;span class="n">uintptr_t&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="n">fixmap_pgd_next&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">PGDIR_SIZE&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">PAGE_TABLE&lt;/span>&lt;span class="p">);&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="pgtableh">pgtable.h&lt;/h3>
-&lt;p>わからないので、まずはヘッダーファイルから読んでいく。
-ページング関連で主要なのヘッダーファイルは&lt;code>arch/riscv/include/asm/pgtable.h&lt;/code>っぽい。
-&lt;code>arch/riscv/include/asm/pgtable.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="na">...&lt;/span>
-&lt;span class="c">#ifdef CONFIG_64BIT
-&lt;/span>&lt;span class="c">#include &amp;lt;asm/pgtable-64.h&amp;gt;
-&lt;/span>&lt;span class="c">#else
-&lt;/span>&lt;span class="c">#include &amp;lt;asm/pgtable-32.h&amp;gt;
-&lt;/span>&lt;span class="c">#endif /* CONFIG_64BIT */
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="na">...&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="pgtable-32h">pgtable-32.h&lt;/h3>
-&lt;p>RV32の場合は&lt;code>arch/riscv/include/asm/pgtable-32.h&lt;/code>も関連してくる。
-まずは、こちらから読んでいく。
-&lt;code>arch/riscv/include/asm/pgtable-32.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="c">#include &amp;lt;asm-generic/pgtable-nopmd.h&amp;gt;
-&lt;/span>&lt;span class="c">#include &amp;lt;linux/const.h&amp;gt;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Size&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">region&lt;/span> &lt;span class="no">mapped&lt;/span> &lt;span class="no">by&lt;/span> &lt;span class="no">a&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="no">global&lt;/span> &lt;span class="no">directory&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="c">#define PGDIR_SHIFT 22
-&lt;/span>&lt;span class="c">#define PGDIR_SIZE (_AC(1, UL) &amp;lt;&amp;lt; PGDIR_SHIFT)
-&lt;/span>&lt;span class="c">#define PGDIR_MASK (~(PGDIR_SIZE - 1))
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>PGDIR_SIZE&lt;/code>は&lt;code>0x400000&lt;/code>となる。
-&lt;code>PGDIR_MASK&lt;/code>は&lt;code>0xffc00000&lt;/code>となる。&lt;/p>
-&lt;h3 id="linux-5-level-paging">Linux 5-Level Paging&lt;/h3>
-&lt;p>Linuxでは、仮想アドレスを5つに分けて物理アドレスにマッピングする。
-一部のx86_64プロセッサではサポートしているようである。
-5-Level Pagingのイメージ図を示す。
-&lt;span class="image-container">&lt;span class="link" >&lt;a href="./image00.png"
-target="_blank">&lt;img class="img" src="./image00.png"/>&lt;/a>&lt;/span>
-&lt;/span>
-それぞれ、Page Global Directory(PGD)、Page 4-Level Directory(P4D)、Page Upper Directory(PUD)、PMD(Page Middle Directory)、PTE(Page Table Entry)である。
-また、Physical PageはPage Frame Number(PFN)で一意に求めることができる。
-&lt;code>PAGE_OFFSET&lt;/code>が0x1000の場合、
-例えば、0x00000000番地ではPFNは0(page 0)となり、0x00001000番地はPFNは1(page 1)となる。&lt;/p>
-&lt;h3 id="risc-vページング">RISC-Vページング&lt;/h3>
-&lt;p>RISC-VにおけるLinuxのページングのイメージ図を示す。
-PUDはRISC-Vでは、使用しない。
-&lt;code>arch/riscv/include/asm/pgtable.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="c">#ifndef __ASSEMBLY__
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">/*&lt;/span> &lt;span class="nf">Page&lt;/span> &lt;span class="no">Upper&lt;/span> &lt;span class="no">Directory&lt;/span> &lt;span class="no">not&lt;/span> &lt;span class="no">used&lt;/span> &lt;span class="no">in&lt;/span> &lt;span class="no">RISC-V&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="c">#include &amp;lt;asm-generic/pgtable-nopud.h&amp;gt;
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>また、P4DについてRISC-Vでは使用しない。&lt;/p>
-&lt;p>&lt;code>include/asm-generic/pgtable-nopud.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="c">#ifndef __ASSEMBLY__
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="c">#include &amp;lt;asm-generic/pgtable-nop4d.h&amp;gt;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="c">#define __PAGETABLE_PUD_FOLDED 1
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>include/asm-generic/pgtable-nop4d.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="c">#define __PAGETABLE_P4D_FOLDED 1
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;span class="image-container">&lt;span class="link" >&lt;a href="./image01.png"
-target="_blank">&lt;img class="img" src="./image01.png"/>&lt;/a>&lt;/span>
-&lt;/span>
-なお、SV32ページングでは、最大2段ページングが可能である。
-よって、SV32では、PGD -&amp;gt; Page Tableの順で索引する。
-なお、PGD内にLeaf PTE(V&amp;amp;&amp;amp;((R|W|X)&amp;amp;&amp;amp;!(!R|W)))がある場合は、4Mページングとなる。
-RISC-Vでは、&lt;code>satp&lt;/code>レジスタがPGDの物理アドレス22ビットを保持する(ページウォーク時には左に2回シフト)。
-4Mページングの場合はPGDを一回索引するだけである。(offsetは22bitとなる)
-&lt;span class="image-container">&lt;span class="link" >&lt;a href="./image02.png"
-target="_blank">&lt;img class="img" src="./image02.png"/>&lt;/a>&lt;/span>
-&lt;/span>&lt;/p>
-&lt;h3 id="sv32ページング">SV32ページング&lt;/h3>
-&lt;p>&lt;code>arch/riscv/include/asm/pgtable-32.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="err">/*&lt;/span> &lt;span class="nf">Size&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">region&lt;/span> &lt;span class="no">mapped&lt;/span> &lt;span class="no">by&lt;/span> &lt;span class="no">a&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="no">global&lt;/span> &lt;span class="no">directory&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="c">#define PGDIR_SHIFT 22
-&lt;/span>&lt;span class="c">#define PGDIR_SIZE (_AC(1, UL) &amp;lt;&amp;lt; PGDIR_SHIFT)
-&lt;/span>&lt;span class="c">#define PGDIR_MASK (~(PGDIR_SIZE - 1))
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>arch/riscv/include/asm/page.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="c">#define PAGE_SHIFT (12)
-&lt;/span>&lt;span class="c">#define PAGE_SIZE (_AC(1, UL) &amp;lt;&amp;lt; PAGE_SHIFT)
-&lt;/span>&lt;span class="c">#define PAGE_MASK (~(PAGE_SIZE - 1))
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="na">...&lt;/span>
-&lt;span class="c">#define HPAGE_SHIFT PMD_SHIFT
-&lt;/span>&lt;span class="c">#define HPAGE_SIZE (_AC(1, UL) &amp;lt;&amp;lt; HPAGE_SHIFT)
-&lt;/span>&lt;span class="c">#define HPAGE_MASK (~(HPAGE_SIZE - 1))
-&lt;/span>&lt;span class="c">#define HUGETLB_PAGE_ORDER (HPAGE_SHIFT - PAGE_SHIFT)
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="na">...&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Page&lt;/span> &lt;span class="no">Global&lt;/span> &lt;span class="no">Directory&lt;/span> &lt;span class="no">entry&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">typedef&lt;/span> &lt;span class="no">struct&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">pgd&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span> &lt;span class="no">pgd_t&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Page&lt;/span> &lt;span class="no">Table&lt;/span> &lt;span class="no">entry&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">typedef&lt;/span> &lt;span class="no">struct&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span> &lt;span class="no">pte_t&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">typedef&lt;/span> &lt;span class="no">struct&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">pgprot&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span> &lt;span class="no">pgprot_t&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">typedef&lt;/span> &lt;span class="no">struct&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">pgtable_t&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>struct page&lt;/code>は&lt;code>include/linux/mm_types.h&lt;/code>で定義されている、ページ記述子である。&lt;/p>
-&lt;p>&lt;code>SHIFT&lt;/code>マクロはあるレベルにおいて、マップされる長さを示す。
-例えば、Page Tableであれば、&lt;code>PAGE_SHIFT&lt;/code>は12なので、&lt;code>2**12 = 4KB&lt;/code>がマッピングの&lt;code>SIZE&lt;/code>となる。
-&lt;code>MASK&lt;/code>マクロは&lt;code>SHIFT&lt;/code>より上位のビットすべてをマスク可能な定数である。例えば、&lt;code>SHIFT&lt;/code>が12の場合、&lt;code>0xfffff000&lt;/code>となる。&lt;/p>
-&lt;p>&lt;code>PAGE_&lt;/code>マクロは、4KBページング用のマクロであり、&lt;code>HPAGE&lt;/code>は4MBページング(Huge Page)である。&lt;/p>
-&lt;p>PTEのフラグは&lt;code>pgprot_t&lt;/code>構造体に格納する。&lt;/p>
-&lt;p>&lt;code>pgd_t&lt;/code>、&lt;code>pte_t&lt;/code>、&lt;code>pgprot_t&lt;/code>の値を作るマクロとして、それぞれ&lt;code>pgd_val(val)&lt;/code>、&lt;code>pte_val(val)&lt;/code>、&lt;code>pgprot_val(val)&lt;/code>が用意されている。
-また、キャスト用のマクロとして&lt;code>__pgd(var)&lt;/code>、&lt;code>__pte(var)&lt;/code>、&lt;code>__pgprot(var)&lt;/code>が用意されている。&lt;/p>
-&lt;p>PTEのフラグ用のマクロは&lt;code>arch/riscv/include/asm/pgtable-bits.h&lt;/code>で定義されている。
-&lt;code>arch/riscv/include/asm/pgtable-bits.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="c">#define _PAGE_PRESENT (1 &amp;lt;&amp;lt; 0)
-&lt;/span>&lt;span class="c">#define __PAGE_READ (1 &amp;lt;&amp;lt; 1) /* Readable */
-&lt;/span>&lt;span class="c">#define __PAGE_WRITE (1 &amp;lt;&amp;lt; 2) /* Writable */
-&lt;/span>&lt;span class="c">#define __PAGE_EXEC (1 &amp;lt;&amp;lt; 3) /* Executable */
-&lt;/span>&lt;span class="c">#define _PAGE_USER (1 &amp;lt;&amp;lt; 4) /* User */
-&lt;/span>&lt;span class="c">#define _PAGE_GLOBAL (1 &amp;lt;&amp;lt; 5) /* Global */
-&lt;/span>&lt;span class="c">#define _PAGE_ACCESSED (1 &amp;lt;&amp;lt; 6) /* Set by hardware on any access */
-&lt;/span>&lt;span class="c">#define _PAGE_DIRTY (1 &amp;lt;&amp;lt; 7) /* Set by hardware on any write */
-&lt;/span>&lt;span class="c">#define _PAGE_SOFT (1 &amp;lt;&amp;lt; 8) /* Reserved for software */
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>pgd_offset&lt;/code>は&lt;code>mm_struct&lt;/code>とアドレスを取り、与えられたアドレスをカバーする&lt;code>pgd&lt;/code>を返す。
-&lt;code>pte_offset&lt;/code>は&lt;code>pmd&lt;/code>とアドレスを取り、与えられたアドレスをカバーする&lt;code>pte&lt;/code>を返す。
-&lt;code>pte_none&lt;/code>、&lt;code>pgd_none&lt;/code>マクロは、与えられたエントリーが存在しない場合は1を返す。
-&lt;code>pte_present&lt;/code>、&lt;code>pgd_present&lt;/code>マクロは、与えられたエントリーが存在する場合は1を返す。
-&lt;code>pte_clear&lt;/code>、&lt;code>pgd_clear&lt;/code>マクロは、与えられたエントリーをクリアする。&lt;/p>
-&lt;p>&lt;code>arch/riscv/include/asm/pgtable.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pmd_present&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_t&lt;/span> &lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">pmd_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">_PAGE_PRESENT&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_PROT_NONE&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pmd_none&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_t&lt;/span> &lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">pmd_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">==&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pmd_bad&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_t&lt;/span> &lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="p">!&lt;/span>&lt;span class="no">pmd_present&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define pmd_leaf pmd_leaf
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pmd_leaf&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_t&lt;/span> &lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pmd_present&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&amp;amp;&lt;/span>
-&lt;span class="err">(&lt;/span>&lt;span class="nf">pmd_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">_PAGE_READ&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_WRITE&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_EXEC&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">void&lt;/span> &lt;span class="no">set_pmd&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">pmdp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pmd_t&lt;/span> &lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="err">*&lt;/span>&lt;span class="nf">pmdp&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="no">pmd&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">void&lt;/span> &lt;span class="no">pmd_clear&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">pmdp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">set_pmd&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmdp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">__pmd&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pgd_t&lt;/span> &lt;span class="no">pfn_pgd&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">pfn&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pgprot_t&lt;/span> &lt;span class="no">prot&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pgd&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="no">pfn&lt;/span> &lt;span class="err">&amp;lt;&amp;lt;&lt;/span> &lt;span class="no">_PAGE_PFN_SHIFT&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">pgprot_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">prot&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">_pgd_pfn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pgd_t&lt;/span> &lt;span class="no">pgd&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pgd_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pgd&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;gt;&amp;gt;&lt;/span> &lt;span class="no">_PAGE_PFN_SHIFT&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">struct&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">pmd_page&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_t&lt;/span> &lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pfn_to_page&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;gt;&amp;gt;&lt;/span> &lt;span class="no">_PAGE_PFN_SHIFT&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">pmd_page_vaddr&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_t&lt;/span> &lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="no">pfn_to_virt&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pmd&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;gt;&amp;gt;&lt;/span> &lt;span class="no">_PAGE_PFN_SHIFT&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Yields&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="no">frame&lt;/span> &lt;span class="no">number&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">PFN&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">a&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="no">table&lt;/span> &lt;span class="no">entry&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">pte_pfn&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;gt;&amp;gt;&lt;/span> &lt;span class="no">_PAGE_PFN_SHIFT&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define pte_page(x) pfn_to_page(pte_pfn(x))
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Constructs&lt;/span> &lt;span class="no">a&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="no">table&lt;/span> &lt;span class="no">entry&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pfn_pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">pfn&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pgprot_t&lt;/span> &lt;span class="no">prot&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="no">pfn&lt;/span> &lt;span class="err">&amp;lt;&amp;lt;&lt;/span> &lt;span class="no">_PAGE_PFN_SHIFT&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">pgprot_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">prot&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define mk_pte(page, prot) pfn_pte(page_to_pfn(page), prot)
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pte_present&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">_PAGE_PRESENT&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_PROT_NONE&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pte_none&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">==&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pte_write&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="no">_PAGE_WRITE&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pte_exec&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="no">_PAGE_EXEC&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pte_huge&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pte_present&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">&amp;amp;&amp;amp;&lt;/span> &lt;span class="err">(&lt;/span>&lt;span class="nf">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">_PAGE_READ&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_WRITE&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_EXEC&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pte_dirty&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="no">_PAGE_DIRTY&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pte_young&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="no">_PAGE_ACCESSED&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pte_special&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="no">_PAGE_SPECIAL&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_rdprotect&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_wrprotect&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="err">~&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">_PAGE_WRITE&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_mkread&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_mkwrite&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_WRITE&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_mkexec&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_mkdirty&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span> &lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_DIRTY&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">; }
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="no">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_mkclean&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="err">~&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">_PAGE_DIRTY&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_mkyoung&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_ACCESSED&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_mkold&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="err">~&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">_PAGE_ACCESSED&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_mkspecial&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_PAGE_SPECIAL&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_mkhuge&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Modify&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="no">protection&lt;/span> &lt;span class="no">bits&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_modify&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pgprot_t&lt;/span> &lt;span class="no">newprot&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&lt;/span> &lt;span class="no">_PAGE_CHG_MASK&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">pgprot_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">newprot&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define pgd_ERROR(e) \
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="nf">pr_err&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="err">&amp;#34;&lt;/span>&lt;span class="nv">%s&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="nv">%d&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="no">bad&lt;/span> &lt;span class="no">pgd&lt;/span> &lt;span class="err">&amp;#34;&lt;/span> &lt;span class="no">PTE_FMT&lt;/span> &lt;span class="err">&amp;#34;&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="err">\&lt;/span>&lt;span class="no">n&lt;/span>&lt;span class="err">&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">__FILE__&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">__LINE__&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pgd_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">e&lt;/span>&lt;span class="p">))&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Commit&lt;/span> &lt;span class="no">new&lt;/span> &lt;span class="no">configuration&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">MMU&lt;/span> &lt;span class="no">hardware&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">void&lt;/span> &lt;span class="no">update_mmu_cache&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">struct&lt;/span> &lt;span class="no">vm_area_struct&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">vma&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">address&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">The&lt;/span> &lt;span class="no">kernel&lt;/span> &lt;span class="no">assumes&lt;/span> &lt;span class="no">that&lt;/span> &lt;span class="no">TLBs&lt;/span> &lt;span class="no">don&lt;/span>&lt;span class="err">&amp;#39;&lt;/span>&lt;span class="no">t&lt;/span> &lt;span class="no">cache&lt;/span> &lt;span class="no">invalid&lt;/span> &lt;span class="no">entries&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">but&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">in&lt;/span> &lt;span class="no">RISC-V&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">SFENCE.VMA&lt;/span> &lt;span class="no">specifies&lt;/span> &lt;span class="no">an&lt;/span> &lt;span class="no">ordering&lt;/span> &lt;span class="no">constraint&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">not&lt;/span> &lt;span class="no">a&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">cache&lt;/span> &lt;span class="no">flush&lt;/span>&lt;span class="c">; it is necessary even after writing invalid entries.
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="p">*&lt;/span> &lt;span class="no">Relying&lt;/span> &lt;span class="no">on&lt;/span> &lt;span class="no">flush_tlb_fix_spurious_fault&lt;/span> &lt;span class="no">would&lt;/span> &lt;span class="no">suffice&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">but&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">the&lt;/span> &lt;span class="no">extra&lt;/span> &lt;span class="no">traps&lt;/span> &lt;span class="no">reduce&lt;/span> &lt;span class="no">performance.&lt;/span> &lt;span class="no">So&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">eagerly&lt;/span> &lt;span class="no">SFENCE.VMA.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">local_flush_tlb_page&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">address&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define __HAVE_ARCH_PTE_SAME
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">pte_same&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_a&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte_b&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_a&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">==&lt;/span> &lt;span class="no">pte_val&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_b&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">Certain&lt;/span> &lt;span class="no">architectures&lt;/span> &lt;span class="no">need&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">do&lt;/span> &lt;span class="no">special&lt;/span> &lt;span class="no">things&lt;/span> &lt;span class="no">when&lt;/span> &lt;span class="no">PTEs&lt;/span> &lt;span class="no">within&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">a&lt;/span> &lt;span class="no">page&lt;/span> &lt;span class="no">table&lt;/span> &lt;span class="no">are&lt;/span> &lt;span class="no">directly&lt;/span> &lt;span class="no">modified.&lt;/span> &lt;span class="no">Thus&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">following&lt;/span> &lt;span class="no">hook&lt;/span> &lt;span class="no">is&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">made&lt;/span> &lt;span class="no">available.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">void&lt;/span> &lt;span class="no">set_pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pteval&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="err">*&lt;/span>&lt;span class="nf">ptep&lt;/span> &lt;span class="err">=&lt;/span> &lt;span class="no">pteval&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">void&lt;/span> &lt;span class="no">flush_icache_pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pte_t&lt;/span> &lt;span class="no">pte&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">void&lt;/span> &lt;span class="no">set_pte_at&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">struct&lt;/span> &lt;span class="no">mm_struct&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">mm&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">addr&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">pteval&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">pte_present&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pteval&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="err">&amp;amp;&amp;amp;&lt;/span> &lt;span class="no">pte_exec&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pteval&lt;/span>&lt;span class="p">))&lt;/span>
-&lt;span class="nf">flush_icache_pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">pteval&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">set_pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pteval&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">void&lt;/span> &lt;span class="no">pte_clear&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">struct&lt;/span> &lt;span class="no">mm_struct&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">mm&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">addr&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">set_pte_at&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">mm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">addr&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">ptep&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">ptep_set_access_flags&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">struct&lt;/span> &lt;span class="no">vm_area_struct&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">vma&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">address&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">pte_t&lt;/span> &lt;span class="no">entry&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">dirty&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">if&lt;/span> &lt;span class="p">(!&lt;/span>&lt;span class="no">pte_same&lt;/span>&lt;span class="p">(*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">entry&lt;/span>&lt;span class="p">))&lt;/span>
-&lt;span class="nf">set_pte_at&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">vma-&lt;/span>&lt;span class="err">&amp;gt;&lt;/span>&lt;span class="no">vm_mm&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">address&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">ptep&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">entry&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/&lt;/span>&lt;span class="p">*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">update_mmu_cache&lt;/span> &lt;span class="no">will&lt;/span> &lt;span class="no">unconditionally&lt;/span> &lt;span class="no">execute&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">handling&lt;/span> &lt;span class="no">both&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">the&lt;/span> &lt;span class="no">case&lt;/span> &lt;span class="no">that&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">PTE&lt;/span> &lt;span class="no">changed&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">spurious&lt;/span> &lt;span class="no">fault&lt;/span> &lt;span class="no">case.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">true&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define __HAVE_ARCH_PTEP_GET_AND_CLEAR
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="no">ptep_get_and_clear&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">struct&lt;/span> &lt;span class="no">mm_struct&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">mm&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">address&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">__pte&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">atomic_long_xchg&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="no">atomic_long_t&lt;/span> &lt;span class="p">*)&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define __HAVE_ARCH_PTEP_TEST_AND_CLEAR_YOUNG
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">ptep_test_and_clear_young&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">struct&lt;/span> &lt;span class="no">vm_area_struct&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">vma&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">address&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">pte_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">if&lt;/span> &lt;span class="p">(!&lt;/span>&lt;span class="no">pte_young&lt;/span>&lt;span class="p">(*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">))&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">return&lt;/span> &lt;span class="no">test_and_clear_bit&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">_PAGE_ACCESSED_OFFSET&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="err">&amp;amp;&lt;/span>&lt;span class="no">pte_val&lt;/span>&lt;span class="p">(*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">))&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define __HAVE_ARCH_PTEP_SET_WRPROTECT
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">void&lt;/span> &lt;span class="no">ptep_set_wrprotect&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">struct&lt;/span> &lt;span class="no">mm_struct&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">mm&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">address&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="nf">atomic_long_and&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="err">~&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="no">_PAGE_WRITE&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">atomic_long_t&lt;/span> &lt;span class="p">*)&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;span class="c">#define __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="nf">static&lt;/span> &lt;span class="no">inline&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">ptep_clear_flush_young&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">struct&lt;/span> &lt;span class="no">vm_area_struct&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">vma&lt;/span>&lt;span class="p">,&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">address&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">pte_t&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">ptep&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">{&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">This&lt;/span> &lt;span class="no">comment&lt;/span> &lt;span class="no">is&lt;/span> &lt;span class="no">borrowed&lt;/span> &lt;span class="no">from&lt;/span> &lt;span class="no">x86&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">but&lt;/span> &lt;span class="no">applies&lt;/span> &lt;span class="no">equally&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">RISC-V&lt;/span>&lt;span class="p">:&lt;/span>
-&lt;span class="err">*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">Clearing&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">accessed&lt;/span> &lt;span class="no">bit&lt;/span> &lt;span class="no">without&lt;/span> &lt;span class="no">a&lt;/span> &lt;span class="no">TLB&lt;/span> &lt;span class="no">flush&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">doesn&lt;/span>&lt;span class="err">&amp;#39;&lt;/span>&lt;span class="no">t&lt;/span> &lt;span class="no">cause&lt;/span> &lt;span class="no">data&lt;/span> &lt;span class="no">corruption.&lt;/span> &lt;span class="p">[&lt;/span> &lt;span class="no">It&lt;/span> &lt;span class="no">could&lt;/span> &lt;span class="no">cause&lt;/span> &lt;span class="no">incorrect&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">page&lt;/span> &lt;span class="no">aging&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">mistaken&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="no">reclaim&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">hot&lt;/span> &lt;span class="no">pages&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">but&lt;/span> &lt;span class="no">the&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">chance&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">that&lt;/span> &lt;span class="no">should&lt;/span> &lt;span class="no">be&lt;/span> &lt;span class="no">relatively&lt;/span> &lt;span class="no">low.&lt;/span> &lt;span class="p">]&lt;/span>
-&lt;span class="err">*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">So&lt;/span> &lt;span class="no">as&lt;/span> &lt;span class="no">a&lt;/span> &lt;span class="no">performance&lt;/span> &lt;span class="no">optimization&lt;/span> &lt;span class="no">don&lt;/span>&lt;span class="err">&amp;#39;&lt;/span>&lt;span class="no">t&lt;/span> &lt;span class="no">flush&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">TLB&lt;/span> &lt;span class="no">when&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">clearing&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">accessed&lt;/span> &lt;span class="no">bit&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">it&lt;/span> &lt;span class="no">will&lt;/span> &lt;span class="no">eventually&lt;/span> &lt;span class="no">be&lt;/span> &lt;span class="no">flushed&lt;/span> &lt;span class="no">by&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">a&lt;/span> &lt;span class="no">context&lt;/span> &lt;span class="no">switch&lt;/span> &lt;span class="no">or&lt;/span> &lt;span class="no">a&lt;/span> &lt;span class="no">VM&lt;/span> &lt;span class="no">operation&lt;/span> &lt;span class="no">anyway.&lt;/span> &lt;span class="p">[&lt;/span> &lt;span class="no">In&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">rare&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">event&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">it&lt;/span> &lt;span class="no">not&lt;/span> &lt;span class="no">getting&lt;/span> &lt;span class="no">flushed&lt;/span> &lt;span class="no">for&lt;/span> &lt;span class="no">a&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">time&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">delay&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">shouldn&lt;/span>&lt;span class="err">&amp;#39;&lt;/span>&lt;span class="no">t&lt;/span> &lt;span class="no">really&lt;/span> &lt;span class="no">matter&lt;/span> &lt;span class="no">because&lt;/span> &lt;span class="no">there&lt;/span>&lt;span class="err">&amp;#39;&lt;/span>&lt;span class="no">s&lt;/span> &lt;span class="no">no&lt;/span> &lt;span class="no">real&lt;/span> &lt;span class="no">memory&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">pressure&lt;/span> &lt;span class="no">for&lt;/span> &lt;span class="no">swapout&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">react&lt;/span> &lt;span class="no">to.&lt;/span> &lt;span class="p">]&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">return&lt;/span> &lt;span class="no">ptep_test_and_clear_young&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">vma&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">address&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">ptep&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>mk_pte&lt;/code>マクロは&lt;code>struct page&lt;/code>とプロテクションビットを取り、&lt;code>pte_t&lt;/code>を返す。
-&lt;code>pte_page&lt;/code>はpteに対応するpageを返す。
-&lt;code>pmd_page&lt;/code>は&lt;code>pmd&lt;/code>に対応するpageを返す。
-&lt;code>set_pte&lt;/code>はpage tableと&lt;code>pte_t&lt;/code>を取り、pteをpage tableに挿入する。&lt;/p>
-&lt;h2 id="references">References&lt;/h2>
-&lt;ul>
-&lt;li>&lt;a href="https://people.kernel.org/linusw/arm32-page-tables"target="_blank" rel="noopener noreferrer">ARM32 Page Tables&lt;/a>
-&lt;/li>
-&lt;li>&lt;a href="https://www.kernel.org/doc/gorman/html/understand/understand006.html"target="_blank" rel="noopener noreferrer">Chapter 3 Page Table Management&lt;/a>
-&lt;/li>
-&lt;li>&lt;a href="https://mkguytone.github.io/allocator-navigatable/ch62.html"target="_blank" rel="noopener noreferrer">第62章 ページ記述子（ struct page )&lt;/a>
-&lt;/li>
-&lt;li>&lt;a href="https://stackoverflow.com/questions/41090469/linux-kernel-how-to-get-physical-address-memory-management"target="_blank" rel="noopener noreferrer">linux kernel - how to get physical address (memory management)?&lt;/a>
-&lt;/li>
-&lt;li>&lt;a href="https://www.kernel.org/doc/html/latest/x86/x86_64/5level-paging.html"target="_blank" rel="noopener noreferrer">24.4. 5-level paging&lt;/a>
-&lt;/li>
-&lt;li>&lt;a href="https://www.kimullaa.com/entry/2020/02/16/155746"target="_blank" rel="noopener noreferrer">Linux メモリ管理 徹底入門(カーネル編)&lt;/a>
-&lt;/li>
-&lt;li>&lt;a href="https://github.com/hiboma/hiboma/blob/master/Linux%E3%82%AB%E3%83%BC%E3%83%8D%E3%83%AB%E8%A7%A3%E8%AA%AD%E5%AE%A4/Linux%E3%82%AB%E3%83%BC%E3%83%8D%E3%83%AB%E8%A7%A3%E8%AA%AD%E5%AE%A4-1.md"target="_blank" rel="noopener noreferrer">hiboma/Linuxカーネル解読室/Linuxカーネル解読室-1.md&lt;/a>
-&lt;/li>
-&lt;li>&lt;a href="https://ryuichi1208.hateblo.jp/entry/2019/01/29/221155"target="_blank" rel="noopener noreferrer">【Linux】mm_struct は何してるか&lt;/a>
-&lt;/li>
-&lt;li>&lt;a href="http://www.coins.tsukuba.ac.jp/~yas/coins/os2-2010/2011-01-25/"target="_blank" rel="noopener noreferrer">メモリ管理、アドレス空間、ページテーブル&lt;/a>
-&lt;/li>
-&lt;/ul>
-&lt;p>今回はこのくらいにしておく。次回から&lt;code>arch/riscv/mm/init.c&lt;/code>を読んでいく。&lt;/p></description></item></channel></rss>
+&lt;p>とりあえず、ここまで。&lt;/p></description></item></channel></rss>

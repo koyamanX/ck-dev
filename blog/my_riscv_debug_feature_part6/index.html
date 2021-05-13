@@ -1,0 +1,274 @@
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>My RISC-V debug feature part6 (target examine, riscv examine)&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="My RISC-V debug feature part6 (target examine, riscv examine)"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">My RISC-V debug feature part6 (target examine, riscv examine)</h1><p class="article date">Thursday, May 13, 2021</p></section><article class="article markdown-body"><p>今回も引き続き、OpenOCDのコードを読んでいく。
+<code>target_examine</code>と<code>riscv_examine</code>を読む。</p><h2 id=target_examine>target_examine</h2><p><code>src/target/target.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/* Targets that correctly implement init + examine, i.e.
+</span><span class=cm> * no communication with target during init:
+</span><span class=cm> *
+</span><span class=cm> * XScale
+</span><span class=cm> */</span>
+<span class=kt>int</span> <span class=nf>target_examine</span><span class=p>(</span><span class=kt>void</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=kt>int</span> <span class=n>retval</span> <span class=o>=</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+	<span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>;</span>
+
+	<span class=k>for</span> <span class=p>(</span><span class=n>target</span> <span class=o>=</span> <span class=n>all_targets</span><span class=p>;</span> <span class=n>target</span><span class=p>;</span> <span class=n>target</span> <span class=o>=</span> <span class=n>target</span><span class=o>-&gt;</span><span class=n>next</span><span class=p>)</span> <span class=p>{</span>
+		<span class=cm>/* defer examination, but don&#39;t skip it */</span>
+		<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap</span><span class=o>-&gt;</span><span class=n>enabled</span><span class=p>)</span> <span class=p>{</span>
+			<span class=n>jtag_register_event_callback</span><span class=p>(</span><span class=n>jtag_enable_callback</span><span class=p>,</span>
+					<span class=n>target</span><span class=p>);</span>
+			<span class=k>continue</span><span class=p>;</span>
+		<span class=p>}</span>
+
+		<span class=k>if</span> <span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>defer_examine</span><span class=p>)</span>
+			<span class=k>continue</span><span class=p>;</span>
+
+		<span class=kt>int</span> <span class=n>retval2</span> <span class=o>=</span> <span class=n>target_examine_one</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>retval2</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span> <span class=p>{</span>
+			<span class=n>LOG_WARNING</span><span class=p>(</span><span class=s>&#34;target %s examination failed&#34;</span><span class=p>,</span> <span class=n>target_name</span><span class=p>(</span><span class=n>target</span><span class=p>));</span>
+			<span class=n>retval</span> <span class=o>=</span> <span class=n>retval2</span><span class=p>;</span>
+		<span class=p>}</span>
+	<span class=p>}</span>
+	<span class=k>return</span> <span class=n>retval</span><span class=p>;</span>
+<span class=p>}</span>
+<span class=cm>/* Equivalent Tcl code arp_examine_one is in src/target/startup.tcl
+</span><span class=cm> * Keep in sync */</span>
+<span class=kt>int</span> <span class=nf>target_examine_one</span><span class=p>(</span><span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>target_call_event_callbacks</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=n>TARGET_EVENT_EXAMINE_START</span><span class=p>);</span>
+
+	<span class=kt>int</span> <span class=n>retval</span> <span class=o>=</span> <span class=n>target</span><span class=o>-&gt;</span><span class=n>type</span><span class=o>-&gt;</span><span class=n>examine</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>retval</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>target_call_event_callbacks</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=n>TARGET_EVENT_EXAMINE_FAIL</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>retval</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=n>target_call_event_callbacks</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=n>TARGET_EVENT_EXAMINE_END</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+<span class=p>}</span>
+
+<span class=k>static</span> <span class=kt>int</span> <span class=nf>jtag_enable_callback</span><span class=p>(</span><span class=k>enum</span> <span class=n>jtag_event</span> <span class=n>event</span><span class=p>,</span> <span class=kt>void</span> <span class=o>*</span><span class=n>priv</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span> <span class=o>=</span> <span class=n>priv</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>event</span> <span class=o>!=</span> <span class=n>JTAG_TAP_EVENT_ENABLE</span> <span class=o>||</span> <span class=o>!</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap</span><span class=o>-&gt;</span><span class=n>enabled</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+
+	<span class=n>jtag_unregister_event_callback</span><span class=p>(</span><span class=n>jtag_enable_callback</span><span class=p>,</span> <span class=n>target</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=n>target_examine_one</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p><code>target_examine_one</code>にて、ターゲット固有の<code>examine</code>を実行する。
+RISC-Vの場合を見ていく。</p><p><code>src/target/riscv/riscv.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>struct</span> <span class=n>target_type</span> <span class=n>riscv_target</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;riscv&#34;</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>target_create</span> <span class=o>=</span> <span class=n>riscv_create_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>init_target</span> <span class=o>=</span> <span class=n>riscv_init_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>deinit_target</span> <span class=o>=</span> <span class=n>riscv_deinit_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>examine</span> <span class=o>=</span> <span class=n>riscv_examine</span><span class=p>,</span>
+
+</code></pre></div><p>riscv用のtarget_type構造体の<code>examine</code>の実態は<code>riscv_examine</code>である。</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kt>int</span> <span class=nf>riscv_examine</span><span class=p>(</span><span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;riscv_examine()&#34;</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>target_was_examined</span><span class=p>(</span><span class=n>target</span><span class=p>))</span> <span class=p>{</span>
+		<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;Target was already examined.&#34;</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>use_vjtag</span> <span class=o>==</span> <span class=nb>true</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;use_vjtag is enabled&#34;</span><span class=p>);</span>
+		<span class=n>riscv_tap_vjtag_init</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap</span><span class=p>);</span>
+	<span class=p>}</span>
+
+	<span class=cm>/* Don&#39;t need to select dbus, since the first thing we do is read dtmcontrol. */</span>
+
+	<span class=n>RISCV_INFO</span><span class=p>(</span><span class=n>info</span><span class=p>);</span>
+	<span class=n>uint32_t</span> <span class=n>dtmcontrol</span> <span class=o>=</span> <span class=n>dtmcontrol_scan</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=mi>0</span><span class=p>);</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;dtmcontrol=0x%x&#34;</span><span class=p>,</span> <span class=n>dtmcontrol</span><span class=p>);</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>dtm_version</span> <span class=o>=</span> <span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTMCONTROL_VERSION</span><span class=p>);</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;  version=0x%x&#34;</span><span class=p>,</span> <span class=n>info</span><span class=o>-&gt;</span><span class=n>dtm_version</span><span class=p>);</span>
+
+	<span class=k>struct</span> <span class=n>target_type</span> <span class=o>*</span><span class=n>tt</span> <span class=o>=</span> <span class=n>get_target_type</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>tt</span> <span class=o>==</span> <span class=nb>NULL</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=kt>int</span> <span class=n>result</span> <span class=o>=</span> <span class=n>tt</span><span class=o>-&gt;</span><span class=n>init_target</span><span class=p>(</span><span class=n>info</span><span class=o>-&gt;</span><span class=n>cmd_ctx</span><span class=p>,</span> <span class=n>target</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>result</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>result</span><span class=p>;</span>
+
+	<span class=k>return</span> <span class=n>tt</span><span class=o>-&gt;</span><span class=n>examine</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p>ここから、RISC-VのDMに対するアクセスが始まる。</p><h2 id=dmへのアクセス>DMへのアクセス</h2><p>なお、今回はVJTAGを用いてDMにアクセスをする。
+まず最初にアクセスするのは、<code>dtmcontrol</code>である。</p><h3 id=dtmcontroldtmcs>dtmcontrol(dtmcs)</h3><p><code>dtmcontrol</code>には<code>dtmcontrol_scan</code>関数を用いてアクセスをする。</p><p><code>src/target/riscv/riscv.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=n>uint8_t</span> <span class=n>ir_dtmcontrol</span><span class=p>[</span><span class=mi>4</span><span class=p>]</span> <span class=o>=</span> <span class=p>{</span><span class=n>DTMCONTROL</span><span class=p>};</span>
+<span class=k>struct</span> <span class=n>scan_field</span> <span class=n>select_dtmcontrol</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>ir_dtmcontrol</span>
+<span class=p>};</span>
+<span class=n>uint8_t</span> <span class=n>ir_dbus</span><span class=p>[</span><span class=mi>4</span><span class=p>]</span> <span class=o>=</span> <span class=p>{</span><span class=n>DBUS</span><span class=p>};</span>
+<span class=k>struct</span> <span class=n>scan_field</span> <span class=n>select_dbus</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>ir_dbus</span>
+<span class=p>};</span>
+</code></pre></div><p><code>src/target/riscv/riscv.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=n>uint32_t</span> <span class=nf>dtmcontrol_scan</span><span class=p>(</span><span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>,</span> <span class=n>uint32_t</span> <span class=n>out</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>struct</span> <span class=n>scan_field</span> <span class=n>field</span><span class=p>;</span>
+	<span class=n>uint8_t</span> <span class=n>in_value</span><span class=p>[</span><span class=mi>4</span><span class=p>];</span>
+	<span class=n>uint8_t</span> <span class=n>out_value</span><span class=p>[</span><span class=mi>4</span><span class=p>]</span> <span class=o>=</span> <span class=p>{</span> <span class=mi>0</span> <span class=p>};</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>bscan_tunnel_ir_width</span> <span class=o>!=</span> <span class=mi>0</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>dtmcontrol_scan_via_bscan</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=n>out</span><span class=p>);</span>
+
+
+	<span class=n>buf_set_u32</span><span class=p>(</span><span class=n>out_value</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>32</span><span class=p>,</span> <span class=n>out</span><span class=p>);</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>use_vjtag</span><span class=p>)</span>
+		<span class=n>vjtag_vir_scan</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap</span><span class=p>,</span> <span class=n>select_dtmcontrol</span><span class=p>.</span><span class=n>out_value</span><span class=p>[</span><span class=mi>0</span><span class=p>]);</span>
+	<span class=k>else</span>
+		<span class=n>jtag_add_ir_scan</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>select_dtmcontrol</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=mi>32</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>out_value</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=n>in_value</span><span class=p>;</span>
+	<span class=n>jtag_add_dr_scan</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>use_vjtag</span><span class=p>)</span>
+		<span class=n>vjtag_vir_scan</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap</span><span class=p>,</span> <span class=n>select_dbus</span><span class=p>.</span><span class=n>out_value</span><span class=p>[</span><span class=mi>0</span><span class=p>]);</span>
+	<span class=k>else</span>
+		<span class=cm>/* Always return to dbus. */</span>
+		<span class=n>jtag_add_ir_scan</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>select_dbus</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+
+	<span class=kt>int</span> <span class=n>retval</span> <span class=o>=</span> <span class=n>jtag_execute_queue</span><span class=p>();</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>retval</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;failed jtag scan: %d&#34;</span><span class=p>,</span> <span class=n>retval</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>retval</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=n>uint32_t</span> <span class=n>in</span> <span class=o>=</span> <span class=n>buf_get_u32</span><span class=p>(</span><span class=n>field</span><span class=p>.</span><span class=n>in_value</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>32</span><span class=p>);</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;DTMCONTROL: 0x%x -&gt; 0x%x&#34;</span><span class=p>,</span> <span class=n>out</span><span class=p>,</span> <span class=n>in</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=n>in</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><p>まずは、VIRへDTMCONTROLを転送する。
+<code>jtag_add_dr_scan(target->tap, 1, &field, TAP_IDLE);</code>
+にて、DR scanを行い、DTMCONTROLの値を取得する。(32 bit)
+結果は、<code>field</code>へ格納される。
+なお、終了後のTAP状態はIDLEとなる。</p><pre><code>	if (use_vjtag)
+		vjtag_vir_scan(target-&gt;tap, select_dbus.out_value[0]);
+</code></pre><p>この行では、DBUS(DMI)へVIRを変更している。
+<code>int retval = jtag_execute_queue();</code>でJTAGのコマンドを実行する。</p><p><code>uint32_t in = buf_get_u32(field.in_value, 0, 32);</code>
+この行で、取得した、DTMCONTROLを取り出す。</p><p><code>dtmcs(dtmcontrol)</code>のレジスタの構成は以下のようになっている。
+<span class=image-container><span class=link><a href=./image00.png target=_blank><img class=img src=./image00.png></a></span></span>
+<code>version</code>フィールドを<code>get_field</code>にて取り出す。</p><p>つぎに、<code>get_target_type</code>を行い、ターゲットの種別を調べる。
+<code>src/target/riscv/riscv.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=k>struct</span> <span class=n>target_type</span> <span class=o>*</span><span class=nf>get_target_type</span><span class=p>(</span><span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>riscv_info_t</span> <span class=o>*</span><span class=n>info</span> <span class=o>=</span> <span class=p>(</span><span class=n>riscv_info_t</span> <span class=o>*</span><span class=p>)</span> <span class=n>target</span><span class=o>-&gt;</span><span class=n>arch_info</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>info</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;Target has not been initialized&#34;</span><span class=p>);</span>
+		<span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=k>switch</span> <span class=p>(</span><span class=n>info</span><span class=o>-&gt;</span><span class=n>dtm_version</span><span class=p>)</span> <span class=p>{</span>
+		<span class=k>case</span> <span class=mi>0</span><span class=o>:</span>
+			<span class=k>return</span> <span class=o>&amp;</span><span class=n>riscv011_target</span><span class=p>;</span>
+		<span class=k>case</span> <span class=mi>1</span><span class=o>:</span>
+			<span class=k>return</span> <span class=o>&amp;</span><span class=n>riscv013_target</span><span class=p>;</span>
+		<span class=k>default</span><span class=o>:</span>
+			<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;Unsupported DTM version: %d&#34;</span><span class=p>,</span> <span class=n>info</span><span class=o>-&gt;</span><span class=n>dtm_version</span><span class=p>);</span>
+			<span class=k>return</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=p>}</span>
+<span class=p>}</span>
+</code></pre></div><p>バージョンに応じて、<code>riscv013_target</code>, <code>riscv011_target</code>を選択する。
+今回は、<code>0b0001</code>としたので、riscv-debug-spec 0.13 and 1.0に準拠となる。</p><p><code>riscv-debug/src/dtm.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#define DTMCS_VERSION	4&#39;b0001
+</span><span class=cp>#define DTMCS_ABITS		6&#39;b100000
+</span></code></pre></div><p><code>src/target/riscv/riscv.c:riscv_examine</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=kt>int</span> <span class=n>result</span> <span class=o>=</span> <span class=n>tt</span><span class=o>-&gt;</span><span class=n>init_target</span><span class=p>(</span><span class=n>info</span><span class=o>-&gt;</span><span class=n>cmd_ctx</span><span class=p>,</span> <span class=n>target</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>result</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>result</span><span class=p>;</span>
+
+	<span class=k>return</span> <span class=n>tt</span><span class=o>-&gt;</span><span class=n>examine</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p>つぎに、ターゲット(<code>riscv_013</code>)固有な初期化を行う。
+その後、<code>examine</code>をする。</p><p><code>riscv-013</code>固有の<code>target_type</code>構造体は以下のとおりである。
+<code>src/target/riscv/riscv-013.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>struct</span> <span class=n>target_type</span> <span class=n>riscv013_target</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;riscv&#34;</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>init_target</span> <span class=o>=</span> <span class=n>init_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>deinit_target</span> <span class=o>=</span> <span class=n>deinit_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>examine</span> <span class=o>=</span> <span class=n>examine</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>poll</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv_openocd_poll</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>halt</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv_halt</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>step</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv_openocd_step</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>assert_reset</span> <span class=o>=</span> <span class=n>assert_reset</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>deassert_reset</span> <span class=o>=</span> <span class=n>deassert_reset</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>write_memory</span> <span class=o>=</span> <span class=n>write_memory</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>arch_state</span> <span class=o>=</span> <span class=n>arch_state</span>
+<span class=p>};</span>
+</code></pre></div><p><code>src/target/riscv/riscv-013.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kt>int</span> <span class=nf>init_target</span><span class=p>(</span><span class=k>struct</span> <span class=n>command_context</span> <span class=o>*</span><span class=n>cmd_ctx</span><span class=p>,</span>
+		<span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;init&#34;</span><span class=p>);</span>
+	<span class=n>RISCV_INFO</span><span class=p>(</span><span class=n>generic_info</span><span class=p>);</span>
+
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>get_register</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_get_register</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>set_register</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_set_register</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>get_register_buf</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_get_register_buf</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>set_register_buf</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_set_register_buf</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>select_current_hart</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_select_current_hart</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>is_halted</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_is_halted</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>resume_go</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_resume_go</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>step_current_hart</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_step_current_hart</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>on_halt</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_on_halt</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>resume_prep</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_resume_prep</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>halt_prep</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_halt_prep</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>halt_go</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_halt_go</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>on_step</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_on_step</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>halt_reason</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_halt_reason</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>read_debug_buffer</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_read_debug_buffer</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>write_debug_buffer</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_write_debug_buffer</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>execute_debug_buffer</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_execute_debug_buffer</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>fill_dmi_write_u64</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_fill_dmi_write_u64</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>fill_dmi_read_u64</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_fill_dmi_read_u64</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>fill_dmi_nop_u64</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_fill_dmi_nop_u64</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>dmi_write_u64_bits</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_dmi_write_u64_bits</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>authdata_read</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_authdata_read</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>authdata_write</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_authdata_write</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>dmi_read</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>dmi_read</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>dmi_write</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>dmi_write</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>read_memory</span> <span class=o>=</span> <span class=n>read_memory</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>test_sba_config_reg</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_test_sba_config_reg</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>hart_count</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_hart_count</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>data_bits</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_data_bits</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>print_info</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv013_print_info</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>version_specific</span> <span class=o>=</span> <span class=n>calloc</span><span class=p>(</span><span class=mi>1</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=n>riscv013_info_t</span><span class=p>));</span>
+	<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>version_specific</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+	<span class=n>generic_info</span><span class=o>-&gt;</span><span class=n>sample_memory</span> <span class=o>=</span> <span class=n>sample_memory</span><span class=p>;</span>
+	<span class=n>riscv013_info_t</span> <span class=o>*</span><span class=n>info</span> <span class=o>=</span> <span class=n>get_info</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>progbufsize</span> <span class=o>=</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>dmi_busy_delay</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>bus_master_read_delay</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>bus_master_write_delay</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>ac_busy_delay</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+
+	<span class=cm>/* Assume all these abstract commands are supported until we learn
+</span><span class=cm>	 * otherwise.
+</span><span class=cm>	 * TODO: The spec allows eg. one CSR to be able to be accessed abstractly
+</span><span class=cm>	 * while another one isn&#39;t. We don&#39;t track that this closely here, but in
+</span><span class=cm>	 * the future we probably should. */</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>abstract_read_csr_supported</span> <span class=o>=</span> <span class=nb>true</span><span class=p>;</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>abstract_write_csr_supported</span> <span class=o>=</span> <span class=nb>true</span><span class=p>;</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>abstract_read_fpr_supported</span> <span class=o>=</span> <span class=nb>true</span><span class=p>;</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>abstract_write_fpr_supported</span> <span class=o>=</span> <span class=nb>true</span><span class=p>;</span>
+
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>has_aampostincrement</span> <span class=o>=</span> <span class=n>YNM_MAYBE</span><span class=p>;</span>
+
+	<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><p><code>init</code>では、<code>riscv013</code>の処理用の関数を<code>generic_info</code>構造体へセットしている。
+<code>generic_info</code>のRISC-V Debug specのバージョン非依存なインターフェイスを提供する。</p><p>今日はここまで。
+次回は<code>examine</code>を読んで、<code>examine</code>の処理が通るようなDMを実装していく。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/fpga/>FPGA</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/jtag/>JTAG</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part5/><span class="iconfont icon-article"></span>My RISC-V debug feature part5</a></p></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>
