@@ -4,7 +4,7 @@ date: 2021-05-16T20:56:07+09:00
 author: "@koyamanX"
 categories: ["RISC-V"]
 tags: ["RISC-V", "FPGA", "JTAG"]
-draft: true
+draft: false
 ---
 
 今回から、`examine`関数を読み、初期化のフローを理解する。
