@@ -7,8 +7,6 @@ copyright = "©2021 koyamanX"
 publishDir = "docs"
 canonifyurls = true
 
-disqusShortname = "https-koyamanx-github-io-ck-dev"
-
 [markup.highlight]
 codeFences = true
 noClasses = false
