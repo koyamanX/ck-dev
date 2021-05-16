@@ -1,0 +1,137 @@
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>My RISC-V debug feature part7 (examine関数(riscv013)の読解, DMの実装)&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="My RISC-V debug feature part7 (examine関数(riscv013)の読解, DMの実装)"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">My RISC-V debug feature part7 (examine関数(riscv013)の読解, DMの実装)</h1><p class="article date">Sunday, May 16, 2021</p></section><article class="article markdown-body"><p>今回から、<code>examine</code>関数を読み、初期化のフローを理解する。
+DMを実装をして、<code>examine</code>で初期化をできるようにしていく。</p><h2 id=examine関数>examine関数</h2><p><code>examine</code>関数はriscv013用のインターフェイスより呼び出される。</p><p><code>src/target/riscv/riscv-013.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>struct</span> <span class=n>target_type</span> <span class=n>riscv013_target</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;riscv&#34;</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>init_target</span> <span class=o>=</span> <span class=n>init_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>deinit_target</span> <span class=o>=</span> <span class=n>deinit_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>examine</span> <span class=o>=</span> <span class=n>examine</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>poll</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv_openocd_poll</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>halt</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv_halt</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>step</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>riscv_openocd_step</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>assert_reset</span> <span class=o>=</span> <span class=n>assert_reset</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>deassert_reset</span> <span class=o>=</span> <span class=n>deassert_reset</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>write_memory</span> <span class=o>=</span> <span class=n>write_memory</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>arch_state</span> <span class=o>=</span> <span class=n>arch_state</span>
+<span class=p>};</span>
+</code></pre></div><h3 id=examine関数の実体>examine関数の実体</h3><p><code>src/target/riscv/riscv-013.c:examine</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kt>int</span> <span class=nf>examine</span><span class=p>(</span><span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=cm>/* Don&#39;t need to select dbus, since the first thing we do is read dtmcontrol. */</span>
+
+	<span class=n>uint32_t</span> <span class=n>dtmcontrol</span> <span class=o>=</span> <span class=n>dtmcontrol_scan</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=mi>0</span><span class=p>);</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;dtmcontrol=0x%x&#34;</span><span class=p>,</span> <span class=n>dtmcontrol</span><span class=p>);</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;  dmireset=%d&#34;</span><span class=p>,</span> <span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTM_DTMCS_DMIRESET</span><span class=p>));</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;  idle=%d&#34;</span><span class=p>,</span> <span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTM_DTMCS_IDLE</span><span class=p>));</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;  dmistat=%d&#34;</span><span class=p>,</span> <span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTM_DTMCS_DMISTAT</span><span class=p>));</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;  abits=%d&#34;</span><span class=p>,</span> <span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTM_DTMCS_ABITS</span><span class=p>));</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;  version=%d&#34;</span><span class=p>,</span> <span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTM_DTMCS_VERSION</span><span class=p>));</span>
+
+</code></pre></div><p>まずは、<code>dtmcontrol_scan</code>にて、DTM内の<code>dtmcs</code>をスキャンする。</p><h3 id=dmicsレジスタ>dmicsレジスタ</h3><p><code>dtmcs</code>レジスタのフォーマットは以下の通り。
+アドレス(IR)は<code>0x10</code>である。
+<span class=image-container><span class=link><a href=./image00.png target=_blank><img class=img src=./image00.png></a></span></span></p><p>各フィールドの意味を以下に示す。(riscv-debug-spec p.88)</p><span class=image-container><span class=link><a href=./image01.png target=_blank><img class=img src=./image01.png></a></span></span><h4 id=dmihardreset>dmihardreset</h4><p><code>1</code>をこのフィールドに書き込むことで、DTMをハードリセットする。
+ハードリセットは実行中のDMIトランザクションを終了させる。また、すべてのDTM内部状態、レジスタを初期状態にする。</p><h4 id=dmireset>dmireset</h4><p><code>1</code>を書き込むことで、<code>sticky error</code>状態をクリアする。また、DMIトランザクションはキャンセルしない。</p><h4 id=idle>idle</h4><p>デバッカに与えるヒントで、DMI scan後に必要なRun-Test/Idleサイクル数を保持する。
+必要に応じて、デバッカは<code>dmics.dmistat</code>を確認する。</p><pre><code>0: 不要
+1: 1
+2: 2
+...
+</code></pre><h4 id=dmistat>dmistat</h4><pre><code>0: no error
+1: reserved(same as 2)
+2: An operation failed
+3: An operation was attempted while DMI access was still in progress
+</code></pre><span class=image-container><span class=link><a href=./image02.png target=_blank><img class=img src=./image02.png></a></span></span><h4 id=abits>abits</h4><p>The size of address in dmi</p><h4 id=version>version</h4><pre><code>0: version 0.11
+1: version 0.13 and 1.0
+15: version not described in any spec
+</code></pre><h3 id=examine続き>examine続き</h3><p><code>src/target/riscv/riscv-013.c:examine</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=k>if</span> <span class=p>(</span><span class=n>dtmcontrol</span> <span class=o>==</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;dtmcontrol is 0. Check JTAG connectivity/board power.&#34;</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+	<span class=p>}</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTM_DTMCS_VERSION</span><span class=p>)</span> <span class=o>!=</span> <span class=mi>1</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;Unsupported DTM version %d. (dtmcontrol=0x%x)&#34;</span><span class=p>,</span>
+				<span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTM_DTMCS_VERSION</span><span class=p>),</span> <span class=n>dtmcontrol</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+	<span class=p>}</span>
+</code></pre></div><p>読み出した、<code>dtmcontrol(dtmcs)</code>を確認する。
+<code>riscv013</code>では、versionが<code>1</code>がリセット値であることが保証されているので、<code>dtmcontrol</code>が0であるとき、正しく読み出せていないことになる。</p><p>つぎに、<code>dtmcs.version</code>を読み出し、<code>1(version 0.13 and 1.0)</code>であるか確認している。</p><p><code>src/target/riscv/riscv-013.c:examine</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=n>riscv013_info_t</span> <span class=o>*</span><span class=n>info</span> <span class=o>=</span> <span class=n>get_info</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+	<span class=cm>/* TODO: This won&#39;t be true if there are multiple DMs. */</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>index</span> <span class=o>=</span> <span class=n>target</span><span class=o>-&gt;</span><span class=n>coreid</span><span class=p>;</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>abits</span> <span class=o>=</span> <span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTM_DTMCS_ABITS</span><span class=p>);</span>
+	<span class=n>info</span><span class=o>-&gt;</span><span class=n>dtmcs_idle</span> <span class=o>=</span> <span class=n>get_field</span><span class=p>(</span><span class=n>dtmcontrol</span><span class=p>,</span> <span class=n>DTM_DTMCS_IDLE</span><span class=p>);</span>
+
+	<span class=cm>/* Reset the Debug Module. */</span>
+	<span class=n>dm013_info_t</span> <span class=o>*</span><span class=n>dm</span> <span class=o>=</span> <span class=n>get_dm</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+
+</code></pre></div><p>読み出した、<code>index</code>, <code>abits</code>, <code>idle</code>は<code>info</code>構造体へ保存する。</p><h4 id=get_info関数>get_info関数</h4><p><code>get_info</code>関数では、<code>riscv</code>のバージョン固有の<code>info</code>構造体を取得する。
+今回の場合は、<code>riscv013</code>用のinfo構造体(<code>riscv013_info_t</code>)を取得する。</p><p><code>src/target/riscv/riscv-013.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=n>riscv013_info_t</span> <span class=o>*</span><span class=nf>get_info</span><span class=p>(</span><span class=k>const</span> <span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>riscv_info_t</span> <span class=o>*</span><span class=n>info</span> <span class=o>=</span> <span class=p>(</span><span class=n>riscv_info_t</span> <span class=o>*</span><span class=p>)</span> <span class=n>target</span><span class=o>-&gt;</span><span class=n>arch_info</span><span class=p>;</span>
+	<span class=n>assert</span><span class=p>(</span><span class=n>info</span><span class=p>);</span>
+	<span class=n>assert</span><span class=p>(</span><span class=n>info</span><span class=o>-&gt;</span><span class=n>version_specific</span><span class=p>);</span>
+	<span class=k>return</span> <span class=p>(</span><span class=n>riscv013_info_t</span> <span class=o>*</span><span class=p>)</span> <span class=n>info</span><span class=o>-&gt;</span><span class=n>version_specific</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><p><code>src/target/riscv/riscv-013.c</code>
+<code>riscv013_info_t</code>抜粋</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>typedef</span> <span class=k>struct</span> <span class=p>{</span>
+	<span class=cm>/* The indexed used to address this hart in its DM. */</span>
+	<span class=kt>unsigned</span> <span class=n>index</span><span class=p>;</span>
+	<span class=cm>/* Number of address bits in the dbus register. */</span>
+	<span class=kt>unsigned</span> <span class=n>abits</span><span class=p>;</span>
+	<span class=cm>/* Number of abstract command data registers. */</span>
+	<span class=kt>unsigned</span> <span class=n>datacount</span><span class=p>;</span>
+	<span class=cm>/* Number of words in the Program Buffer. */</span>
+	<span class=kt>unsigned</span> <span class=n>progbufsize</span><span class=p>;</span>
+
+	<span class=cm>/* We cache the read-only bits of sbcs here. */</span>
+	<span class=n>uint32_t</span> <span class=n>sbcs</span><span class=p>;</span>
+
+<span class=p>...</span>
+
+	<span class=n>dm013_info_t</span> <span class=o>*</span><span class=n>dm</span><span class=p>;</span>
+<span class=p>}</span> <span class=n>riscv013_info_t</span><span class=p>;</span>
+</code></pre></div><p>DTMやDMの情報を保持する。</p><h4 id=get_dm関数>get_dm関数</h4><p>この関数では、ターゲットの<code>DM</code>構造体を返す。
+もし、見つからない場合は、作成し初期化する。
+構造体としては、<code>dm013_info_t</code>と同じである。</p><h3 id=examine続き-1>examine続き</h3><p><code>src/target/riscv/riscv-013.c:examine</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>dm</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+	<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>dm</span><span class=o>-&gt;</span><span class=n>was_reset</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>dmi_write</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=n>DM_DMCONTROL</span><span class=p>,</span> <span class=mi>0</span><span class=p>);</span>
+		<span class=n>dmi_write</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=n>DM_DMCONTROL</span><span class=p>,</span> <span class=n>DM_DMCONTROL_DMACTIVE</span><span class=p>);</span>
+		<span class=n>dm</span><span class=o>-&gt;</span><span class=n>was_reset</span> <span class=o>=</span> <span class=nb>true</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=n>dmi_write</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=n>DM_DMCONTROL</span><span class=p>,</span> <span class=n>DM_DMCONTROL_HARTSELLO</span> <span class=o>|</span>
+			<span class=n>DM_DMCONTROL_HARTSELHI</span> <span class=o>|</span> <span class=n>DM_DMCONTROL_DMACTIVE</span> <span class=o>|</span>
+			<span class=n>DM_DMCONTROL_HASEL</span><span class=p>);</span>
+	<span class=n>uint32_t</span> <span class=n>dmcontrol</span><span class=p>;</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>dmi_read</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>dmcontrol</span><span class=p>,</span> <span class=n>DM_DMCONTROL</span><span class=p>)</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>get_field</span><span class=p>(</span><span class=n>dmcontrol</span><span class=p>,</span> <span class=n>DM_DMCONTROL_DMACTIVE</span><span class=p>))</span> <span class=p>{</span>
+		<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;Debug Module did not become active. dmcontrol=0x%x&#34;</span><span class=p>,</span>
+				<span class=n>dmcontrol</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+	<span class=p>}</span>
+</code></pre></div><p><code>dm</code>が初期化されていない場合は、初期化をする。
+初期では、<code>DM_DMCONTROL</code>(<code>DTM</code>でないことに注意)をまず、0で初期化する。
+<code>dmi_write</code>は<code>dbus(DMI)</code>を経由して、<code>DM</code>のレジスタを書き込みする。
+今回は、<code>DM_DMCONTORL</code>アドレスに、<code>0</code>を書き込む。</p><p>その後、<code>DMACTIVE</code>フィールドを1にする。
+<span class=image-container><span class=link><a href=./image03.png target=_blank><img class=img src=./image03.png></a></span></span>
+このフィールドはDMのリセット信号として機能する。
+このフィールドに書き込みをした場合は、次のアクションを行う前に、書き込んだ値が反映されているかポーリングが必要。
+このフィールドが<code>0</code>の場合は、DMはすべて初期状態であることを示し、DMに対するアクセスはすべて失敗する。
+また、<code>version</code>フィールドは正しい値を返さないかもしれない。
+<code>1</code>の場合は、DMが正しく動作していることを示す。</p><p>次に、<code>DM_DMCONTROL_DMACTIVE</code>の他に、<code>WARL</code>フィールドに<code>-1</code>を書き込む。
+読み出したっているビットを見ることで、DMがサポートする機能がわかる。
+書き込むフィールドは<code>DM_DMCONTROL_HARTSEL</code>、<code>DM_DMCONTROL_HARTSELLO</code>、<code>DM_DMCONTROL_HARTSELHI</code>である。
+これらは、hartの選択方法を規定するものである。（詳しくは後ほど)</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=n>dmi_write</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=n>DM_DMCONTROL</span><span class=p>,</span> <span class=n>DM_DMCONTROL_HARTSELLO</span> <span class=o>|</span>
+			<span class=n>DM_DMCONTROL_HARTSELHI</span> <span class=o>|</span> <span class=n>DM_DMCONTROL_DMACTIVE</span> <span class=o>|</span>
+			<span class=n>DM_DMCONTROL_HASEL</span><span class=p>);</span>
+</code></pre></div><p>次に、<code>dmi_read</code>にて<code>DM_DMCONTROL</code>を読み出し、<code>DMACTIVE</code>ビットが1であるか検査をする。
+<code>0</code>の場合は、DMはアクティブでない。</p><h3 id=今日はここまで>今日はここまで</h3><p>今回はここまで。
+ちなみに、<code>DMACTIVE</code>までは、DMを実装している。
+そのため、<code>examine</code>は途中まで成功している。
+次回は、まだ実装していない<code>hart</code>の選択方法から見ていく。
+なんか、投稿のフォーマットがぐちゃぐちゃで見づらい説はある。
+なんかいい方法ないかな。
+あと、表をいい感じに書きたい。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/fpga/>FPGA</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/jtag/>JTAG</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part6/><span class="iconfont icon-article"></span>My RISC-V debug feature part6 (target examine, riscv examine)</a></p></section><section class="article discussion"><div id=disqus_thread></div><script type=application/javascript>var disqus_config=function(){};(function(){if(["localhost","127.0.0.1"].indexOf(window.location.hostname)!=-1){document.getElementById('disqus_thread').innerHTML='Disqus comments not available by default when the website is previewed locally.';return}var b=document,a=b.createElement('script');a.async=!0,a.src='//https-koyamanx-github-io-ck-dev.disqus.com/embed.js',a.setAttribute('data-timestamp',+new Date),(b.head||b.body).appendChild(a)})()</script><noscript>Please enable JavaScript to view the <a href=https://disqus.com/?ref_noscript>comments powered by Disqus.</a></noscript><a href=https://disqus.com class=dsq-brlink>comments powered by <span class=logo-disqus>Disqus</span></a></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>
