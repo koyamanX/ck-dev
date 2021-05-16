@@ -1,0 +1,243 @@
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>Reading linux kernel part1&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="Reading linux kernel part1"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">Reading linux kernel part1</h1><p class="article date">Monday, March 22, 2021</p></section><article class="article markdown-body"><p>RISC-V portsのLinux Kernelを読んでいく。
+自作のRISC-V SoC向けに移植をすることを目標としている。</p><h2 id=boot-loaderopensbiによるlinuxのロード実行>Boot loader(OpenSBI)によるLinuxのロード・実行</h2><p>OpenSBIのFW_PAYLOADとして、Linux kernelをロードし、制御を移すこととする。
+また、SoCの情報はDevice Treeとして記述し、FDT(Flatten Device Tree)としてOpenSBIより引き渡す。</p><p>以下に、OpenSBIからLinuxをブートする際のメモリマップの概略図を示す。
+<code>0x80400000</code>にLinux Kernelが配置されている。
+OpenSBIは<code>a0</code>レジスタに<code>mhartid</code>、<code>a1</code>レジスタにFDT PAが格納されている。</p><p>以下のトラップはS-modeへdelegationされているので、Linuxによりハンドルされる。</p><ul><li>Supervisor Software Interrput</li><li>Supervisor Timer Interrput</li><li>Supervisor External Interrput</li><li>Environment Call From U Mode</li><li>Instruction Address Misaligned</li><li>Environment breakpoint</li><li>Instruction Page Fault</li><li>Load Page Fault</li><li>Store AMO Page Fault</li></ul><p>それ以外のトラップはOpenSBI(M-mode)によりハンドルされる。
+また、early stageでは、SBIコールを用いてコンソール入出力を行う(<code>earlycon=sbi</code>)。</p><span class=image-container><span class=link><a href=./image00.png target=_blank><img class=img src=./image00.png></a></span></span><h2 id=linux-kernel-entrypoint>Linux kernel entrypoint</h2><h3 id=linker-script>linker script</h3><p>linker scriptは<code>arch/riscv/kernel/vmlinux.lds.S</code>である。
+マクロは<code>include/asm-generic/vmlinux.lds.h</code>を参照。</p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c>#define LOAD_OFFSET PAGE_OFFSET
+</span><span class=c>#include &lt;asm/vmlinux.lds.h&gt;
+</span><span class=c>#include &lt;asm/page.h&gt;
+</span><span class=c>#include &lt;asm/cache.h&gt;
+</span><span class=c>#include &lt;asm/thread_info.h&gt;
+</span><span class=c>#include &lt;asm/set_memory.h&gt;
+</span><span class=c></span>
+<span class=c>#include &lt;linux/sizes.h&gt;
+</span><span class=c></span><span class=nf>OUTPUT_ARCH</span><span class=p>(</span><span class=no>riscv</span><span class=p>)</span>
+<span class=nf>ENTRY</span><span class=p>(</span><span class=no>_start</span><span class=p>)</span>
+
+<span class=nf>jiffies</span> <span class=err>=</span> <span class=no>jiffies_64</span><span class=c>;
+</span><span class=c></span>
+<span class=nf>SECTIONS</span>
+<span class=err>{</span>
+	<span class=err>/*</span> <span class=nf>Beginning</span> <span class=no>of</span> <span class=no>code</span> <span class=no>and</span> <span class=no>text</span> <span class=no>segment</span> <span class=p>*</span><span class=err>/</span>
+	<span class=err>.</span> <span class=err>=</span> <span class=nf>LOAD_OFFSET</span><span class=c>;
+</span><span class=c></span>	<span class=no>_start</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>	<span class=no>HEAD_TEXT_SECTION</span>
+	<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=no>PAGE_SIZE</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>
+	<span class=nf>__init_begin</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>	<span class=no>INIT_TEXT_SECTION</span><span class=p>(</span><span class=no>PAGE_SIZE</span><span class=p>)</span>
+	<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=mi>8</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>	<span class=no>__soc_early_init_table</span> <span class=p>:</span> <span class=err>{</span>
+		<span class=nf>__soc_early_init_table_start</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>		<span class=no>KEEP</span><span class=p>(*(</span><span class=no>__soc_early_init_table</span><span class=p>))</span>
+		<span class=nf>__soc_early_init_table_end</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>	<span class=err>}</span>
+	<span class=nf>__soc_builtin_dtb_table</span> <span class=p>:</span> <span class=err>{</span>
+		<span class=nf>__soc_builtin_dtb_table_start</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>		<span class=no>KEEP</span><span class=p>(*(</span><span class=no>__soc_builtin_dtb_table</span><span class=p>))</span>
+		<span class=nf>__soc_builtin_dtb_table_end</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>	<span class=err>}</span>
+	<span class=err>/*</span> <span class=nf>we</span> <span class=no>have</span> <span class=no>to</span> <span class=no>discard</span> <span class=no>exit</span> <span class=no>text</span> <span class=no>and</span> <span class=no>such</span> <span class=no>at</span> <span class=no>runtime</span><span class=p>,</span> <span class=no>not</span> <span class=no>link</span> <span class=no>time</span> <span class=p>*</span><span class=err>/</span>
+	<span class=na>.exit.text</span> <span class=p>:</span>
+	<span class=err>{</span>
+		<span class=nf>EXIT_TEXT</span>
+	<span class=err>}</span>
+	<span class=na>.exit.data</span> <span class=p>:</span>
+	<span class=err>{</span>
+		<span class=nf>EXIT_DATA</span>
+	<span class=err>}</span>
+	<span class=nf>PERCPU_SECTION</span><span class=p>(</span><span class=no>L1_CACHE_BYTES</span><span class=p>)</span>
+	<span class=nf>__init_end</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>
+	<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=no>SECTION_ALIGN</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>	<span class=no>.text</span> <span class=p>:</span> <span class=err>{</span>
+		<span class=nf>_text</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>		<span class=no>_stext</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>		<span class=no>TEXT_TEXT</span>
+		<span class=nf>SCHED_TEXT</span>
+		<span class=nf>CPUIDLE_TEXT</span>
+		<span class=nf>LOCK_TEXT</span>
+		<span class=nf>KPROBES_TEXT</span>
+		<span class=nf>ENTRY_TEXT</span>
+		<span class=nf>IRQENTRY_TEXT</span>
+		<span class=nf>SOFTIRQENTRY_TEXT</span>
+		<span class=err>*(</span><span class=na>.fixup</span><span class=p>)</span>
+		<span class=nf>_etext</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>	<span class=err>}</span>
+
+	<span class=nf>INIT_DATA_SECTION</span><span class=p>(</span><span class=mi>16</span><span class=p>)</span>
+
+	<span class=err>/*</span> <span class=nf>Start</span> <span class=no>of</span> <span class=no>data</span> <span class=no>section</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>_sdata</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>	<span class=no>RO_DATA</span><span class=p>(</span><span class=no>SECTION_ALIGN</span><span class=p>)</span>
+	<span class=na>.srodata</span> <span class=p>:</span> <span class=err>{</span>
+		<span class=err>*(</span><span class=na>.srodata</span><span class=p>*)</span>
+	<span class=err>}</span>
+
+	<span class=nf>EXCEPTION_TABLE</span><span class=p>(</span><span class=mi>0x10</span><span class=p>)</span>
+
+	<span class=err>.</span> <span class=err>=</span> <span class=nf>ALIGN</span><span class=p>(</span><span class=no>SECTION_ALIGN</span><span class=p>)</span><span class=c>;
+</span><span class=c></span>	<span class=no>_data</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>
+	<span class=nf>RW_DATA</span><span class=p>(</span><span class=no>L1_CACHE_BYTES</span><span class=p>,</span> <span class=no>PAGE_SIZE</span><span class=p>,</span> <span class=no>THREAD_SIZE</span><span class=p>)</span>
+	<span class=na>.sdata</span> <span class=p>:</span> <span class=err>{</span>
+		<span class=nf>__global_pointer$</span> <span class=err>=</span> <span class=p>.</span> <span class=err>+</span> <span class=mi>0x800</span><span class=c>;
+</span><span class=c></span>		<span class=p>*(.</span><span class=no>sdata</span><span class=p>*)</span>
+		<span class=err>/*</span> <span class=nf>End</span> <span class=no>of</span> <span class=no>data</span> <span class=no>section</span> <span class=p>*</span><span class=err>/</span>
+		<span class=nf>_edata</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>	<span class=err>}</span>
+
+	<span class=nf>BSS_SECTION</span><span class=p>(</span><span class=no>PAGE_SIZE</span><span class=p>,</span> <span class=no>PAGE_SIZE</span><span class=p>,</span> <span class=mi>0</span><span class=p>)</span>
+
+	<span class=na>.rel.dyn</span> <span class=p>:</span> <span class=err>{</span>
+		<span class=err>*(</span><span class=na>.rel.dyn</span><span class=p>*)</span>
+	<span class=err>}</span>
+
+	<span class=nf>_end</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span>
+	<span class=nf>STABS_DEBUG</span>
+	<span class=nf>DWARF_DEBUG</span>
+
+	<span class=nf>DISCARDS</span>
+<span class=err>}</span>
+</code></pre></div><span class=image-container><span class=link><a href=./image01.png target=_blank><img class=img src=./image01.png></a></span></span><h3 id=エントリーポイント>エントリーポイント</h3><p>Linux kernelのエントリーポイントは<code>arch/riscv/kernel/head.S</code>の<code>_start</code>シンボルである。</p><p><code>arch/riscv/kernel/head.S</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=nf>__HEAD</span>
+<span class=nf>ENTRY</span><span class=p>(</span><span class=no>_start</span><span class=p>)</span>
+	<span class=err>/*</span>
+	 <span class=err>*</span> <span class=nf>Image</span> <span class=no>header</span> <span class=no>expected</span> <span class=no>by</span> <span class=no>Linux</span> <span class=no>boot-loaders.</span> <span class=no>The</span> <span class=no>image</span> <span class=no>header</span> <span class=no>data</span>
+	 <span class=err>*</span> <span class=nf>structure</span> <span class=no>is</span> <span class=no>described</span> <span class=no>in</span> <span class=no>asm</span><span class=err>/</span><span class=no>image.h.</span>
+	 <span class=err>*</span> <span class=nf>Do</span> <span class=no>not</span> <span class=no>modify</span> <span class=no>it</span> <span class=no>without</span> <span class=no>modifying</span> <span class=no>the</span> <span class=no>structure</span> <span class=no>and</span> <span class=no>all</span> <span class=no>bootloaders</span>
+	 <span class=err>*</span> <span class=nf>that</span> <span class=no>expects</span> <span class=no>this</span> <span class=no>header</span> <span class=no>format</span><span class=p>!!</span>
+	 <span class=err>*/</span>
+	<span class=err>/*</span> <span class=nf>jump</span> <span class=no>to</span> <span class=no>start</span> <span class=no>kernel</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>j</span> <span class=no>_start_kernel</span>
+	<span class=err>/*</span> <span class=nf>reserved</span> <span class=p>*</span><span class=err>/</span>
+	<span class=na>.word</span> <span class=mi>0</span>
+	<span class=na>.balign</span> <span class=mi>8</span>
+<span class=c>#if __riscv_xlen == 64
+</span><span class=c></span>	<span class=err>/*</span> <span class=nf>Image</span> <span class=no>load</span> <span class=no>offset</span><span class=p>(</span><span class=mi>2</span><span class=no>MB</span><span class=p>)</span> <span class=no>from</span> <span class=no>start</span> <span class=no>of</span> <span class=no>RAM</span> <span class=p>*</span><span class=err>/</span>
+	<span class=na>.dword</span> <span class=mi>0x200000</span>
+<span class=c>#else
+</span><span class=c></span>	<span class=err>/*</span> <span class=nf>Image</span> <span class=no>load</span> <span class=no>offset</span><span class=p>(</span><span class=mi>4</span><span class=no>MB</span><span class=p>)</span> <span class=no>from</span> <span class=no>start</span> <span class=no>of</span> <span class=no>RAM</span> <span class=p>*</span><span class=err>/</span>
+	<span class=na>.dword</span> <span class=mi>0x400000</span>
+<span class=c>#endif
+</span><span class=c></span>	<span class=err>/*</span> <span class=nf>Effective</span> <span class=no>size</span> <span class=no>of</span> <span class=no>kernel</span> <span class=no>image</span> <span class=p>*</span><span class=err>/</span>
+	<span class=na>.dword</span> <span class=no>_end</span> <span class=p>-</span> <span class=no>_start</span>
+	<span class=na>.dword</span> <span class=no>__HEAD_FLAGS</span>
+	<span class=na>.word</span> <span class=no>RISCV_HEADER_VERSION</span>
+	<span class=na>.word</span> <span class=mi>0</span>
+	<span class=na>.dword</span> <span class=mi>0</span>
+	<span class=na>.ascii</span> <span class=no>RISCV_IMAGE_MAGIC</span>
+	<span class=na>.balign</span> <span class=mi>4</span>
+	<span class=na>.ascii</span> <span class=no>RISCV_IMAGE_MAGIC2</span>
+	<span class=na>.word</span> <span class=mi>0</span>
+</code></pre></div><p>なお、<code>_start</code>シンボルの実体は<code>riscv_image_header</code>構造体である。</p><p><code>arch/riscv/include/asm/image.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=nf>struct</span> <span class=no>riscv_image_header</span> <span class=err>{</span>
+	<span class=nf>u32</span> <span class=no>code0</span><span class=c>;
+</span><span class=c></span>	<span class=no>u32</span> <span class=no>code1</span><span class=c>;
+</span><span class=c></span>	<span class=no>u64</span> <span class=no>text_offset</span><span class=c>;
+</span><span class=c></span>	<span class=no>u64</span> <span class=no>image_size</span><span class=c>;
+</span><span class=c></span>	<span class=no>u64</span> <span class=no>flags</span><span class=c>;
+</span><span class=c></span>	<span class=no>u32</span> <span class=no>version</span><span class=c>;
+</span><span class=c></span>	<span class=no>u32</span> <span class=no>res1</span><span class=c>;
+</span><span class=c></span>	<span class=no>u64</span> <span class=no>res2</span><span class=c>;
+</span><span class=c></span>	<span class=no>u64</span> <span class=no>magic</span><span class=c>;
+</span><span class=c></span>	<span class=no>u32</span> <span class=no>magic2</span><span class=c>;
+</span><span class=c></span>	<span class=no>u32</span> <span class=no>res3</span><span class=c>;
+</span><span class=c></span><span class=err>}</span><span class=c>;
+</span></code></pre></div><p><code>code0</code>、<code>code1</code>はRISC-Vの命令となっており、<code>code0</code>は(<code>j _start_kernel</code>)となっている。
+また、<code>riscv_image_header</code>のmagicナンバーは以下のようになっている。</p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c>#define RISCV_IMAGE_MAGIC	&#34;RISCV\0\0\0&#34;
+</span><span class=c>#define RISCV_IMAGE_MAGIC2	&#34;RSC\x05&#34;
+</span></code></pre></div><h2 id=_start_kernel>_start_kernel</h2><p>次に、<code>_start_kernel</code>を読んでいく。</p><p><code>arch/riscv/kernel/head.S</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm>	<span class=nf>__INIT</span>
+<span class=nf>ENTRY</span><span class=p>(</span><span class=no>_start_kernel</span><span class=p>)</span>
+	<span class=err>/*</span> <span class=nf>Mask</span> <span class=no>all</span> <span class=no>interrupts</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>csrw</span> <span class=no>CSR_IE</span><span class=p>,</span> <span class=no>zero</span>
+	<span class=nf>csrw</span> <span class=no>CSR_IP</span><span class=p>,</span> <span class=no>zero</span>
+<span class=c>#ifdef CONFIG_RISCV_M_MODE
+</span><span class=c></span>	<span class=na>...</span>
+<span class=c>#endif /* CONFIG_RISCV_M_MODE */
+</span><span class=c></span>	<span class=err>/*</span> <span class=nf>Load</span> <span class=no>the</span> <span class=no>global</span> <span class=no>pointer</span> <span class=p>*</span><span class=err>/</span>
+<span class=na>.option</span> <span class=no>push</span>
+<span class=na>.option</span> <span class=no>norelax</span>
+	<span class=nf>la</span> <span class=no>gp</span><span class=p>,</span> <span class=no>__global_pointer$</span>
+<span class=na>.option</span> <span class=no>pop</span>
+
+	<span class=err>/*</span>
+	 <span class=err>*</span> <span class=nf>Disable</span> <span class=no>FPU</span> <span class=no>to</span> <span class=no>detect</span> <span class=no>illegal</span> <span class=no>usage</span> <span class=no>of</span>
+	 <span class=err>*</span> <span class=nf>floating</span> <span class=no>point</span> <span class=no>in</span> <span class=no>kernel</span> <span class=no>space</span>
+	 <span class=err>*/</span>
+	<span class=nf>li</span> <span class=no>t0</span><span class=p>,</span> <span class=no>SR_FS</span>
+	<span class=nf>csrc</span> <span class=no>CSR_STATUS</span><span class=p>,</span> <span class=no>t0</span>
+<span class=c>#ifdef CONFIG_SMP
+</span><span class=c></span>	<span class=na>...</span>
+<span class=c>#endif
+</span></code></pre></div><h3 id=割込みをクリア>割込みをクリア</h3><p>OpenSBIを用いているため、<code>CONFIG_RISCV_M_MODE</code>はdefineしていないので、スキップする。</p><h3 id=global-pointerの設定>global pointerの設定</h3><p><code>gp</code>に<code>__global_pointer$</code>をロードするときはlinker relaxationを無効にする。
+FPUを無効にする。
+今回はシングルコアなので、<code>CONFIG_SMP</code>はdefineしていないのでスキップ。</p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm>	<span class=err>/*</span> <span class=nf>Pick</span> <span class=no>one</span> <span class=no>hart</span> <span class=no>to</span> <span class=no>run</span> <span class=no>the</span> <span class=no>main</span> <span class=no>boot</span> <span class=no>sequence</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>la</span> <span class=no>a3</span><span class=p>,</span> <span class=no>hart_lottery</span>
+	<span class=nf>li</span> <span class=no>a2</span><span class=p>,</span> <span class=mi>1</span>
+	<span class=nf>amoadd.w</span> <span class=no>a3</span><span class=p>,</span> <span class=no>a2</span><span class=p>,</span> <span class=p>(</span><span class=no>a3</span><span class=p>)</span>
+	<span class=nf>bnez</span> <span class=no>a3</span><span class=p>,</span> <span class=no>.Lsecondary_start</span>
+
+	<span class=err>/*</span> <span class=nf>Clear</span> <span class=no>BSS</span> <span class=no>for</span> <span class=no>flat</span> <span class=no>non-ELF</span> <span class=no>images</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>la</span> <span class=no>a3</span><span class=p>,</span> <span class=no>__bss_start</span>
+	<span class=nf>la</span> <span class=no>a4</span><span class=p>,</span> <span class=no>__bss_stop</span>
+	<span class=nf>ble</span> <span class=no>a4</span><span class=p>,</span> <span class=no>a3</span><span class=p>,</span> <span class=no>clear_bss_done</span>
+<span class=nl>clear_bss:</span>
+	<span class=nf>REG_S</span> <span class=no>zero</span><span class=p>,</span> <span class=p>(</span><span class=no>a3</span><span class=p>)</span>
+	<span class=nf>add</span> <span class=no>a3</span><span class=p>,</span> <span class=no>a3</span><span class=p>,</span> <span class=no>RISCV_SZPTR</span>
+	<span class=nf>blt</span> <span class=no>a3</span><span class=p>,</span> <span class=no>a4</span><span class=p>,</span> <span class=no>clear_bss</span>
+<span class=nl>clear_bss_done:</span>
+
+	<span class=err>/*</span> <span class=nf>Save</span> <span class=no>hart</span> <span class=no>ID</span> <span class=no>and</span> <span class=no>DTB</span> <span class=no>physical</span> <span class=no>address</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>mv</span> <span class=no>s0</span><span class=p>,</span> <span class=no>a0</span>
+	<span class=nf>mv</span> <span class=no>s1</span><span class=p>,</span> <span class=no>a1</span>
+	<span class=nf>la</span> <span class=no>a2</span><span class=p>,</span> <span class=no>boot_cpu_hartid</span>
+	<span class=nf>REG_S</span> <span class=no>a0</span><span class=p>,</span> <span class=p>(</span><span class=no>a2</span><span class=p>)</span>
+
+	<span class=err>/*</span> <span class=nf>Initialize</span> <span class=no>page</span> <span class=no>tables</span> <span class=no>and</span> <span class=no>relocate</span> <span class=no>to</span> <span class=no>virtual</span> <span class=no>addresses</span> <span class=p>*</span><span class=err>/</span>
+	<span class=nf>la</span> <span class=no>sp</span><span class=p>,</span> <span class=no>init_thread_union</span> <span class=err>+</span> <span class=no>THREAD_SIZE</span>
+	<span class=nf>mv</span> <span class=no>a0</span><span class=p>,</span> <span class=no>s1</span>
+	<span class=nf>call</span> <span class=no>setup_vm</span>
+<span class=c>#ifdef CONFIG_MMU
+</span><span class=c></span>	<span class=nf>la</span> <span class=no>a0</span><span class=p>,</span> <span class=no>early_pg_dir</span>
+	<span class=nf>call</span> <span class=no>relocate</span>
+<span class=c>#endif /* CONFIG_MMU */
+</span><span class=c></span>
+</code></pre></div><h3 id=boot-hartの選定>Boot hartの選定</h3><p><code>hart_lottery</code>を使ってlotteryを行い、boot hartを決定する。</p><h3 id=bssのゼロクリア>bssのゼロクリア</h3><p>次に<code>__bss_start</code>から<code>__bss_stop</code>までを0クリアする。
+これは、Linker script上のマクロ関数<code>BSS_SECTION</code>を展開すると発見できる。
+それぞれ、<code>.bss</code>セクションの先頭と最後のアドレスである。</p><h3 id=ブートローダーからの情報の保存>ブートローダーからの情報の保存</h3><p>次に、前段のブートローダーから受けた、mhartid(<code>a0</code>)とFDT PA(<code>a1</code>)を保存する。
+<code>boot_cpu_hartid</code>にboot hartのmhartidを保存する。</p><h3 id=page-tableの初期化>page tableの初期化</h3><p>まず、<code>sp</code>を初期化する。
+<code>THREAD_SIZE</code>は<code>arch/riscv/include/asm/thread_info.h</code>に定義がある。</p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=err>/*</span> <span class=nf>thread</span> <span class=no>information</span> <span class=no>allocation</span> <span class=p>*</span><span class=err>/</span>
+<span class=c>#ifdef CONFIG_64BIT
+</span><span class=c>#define THREAD_SIZE_ORDER	(2)
+</span><span class=c>#else
+</span><span class=c>#define THREAD_SIZE_ORDER	(1)
+</span><span class=c>#endif
+</span><span class=c>#define THREAD_SIZE		(PAGE_SIZE &lt;&lt; THREAD_SIZE_ORDER)
+</span></code></pre></div><p><code>PAGE_SIZE</code>は<code>arch/riscv/include/asm/page.h</code>に定義がある。</p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c>#define PAGE_SHIFT	(12)
+</span><span class=c>#define PAGE_SIZE	(_AC(1, UL) &lt;&lt; PAGE_SHIFT)
+</span><span class=c>#define PAGE_MASK	(~(PAGE_SIZE - 1))
+</span></code></pre></div><p>つまり、<code>THREAD_SIZE</code>はRV32の場合、8192((0x1&#171;12)&#171;1)になる。</p><p><code>init_thread_union</code>はlinker scriptの<code>RW_DATA</code>内の<code>INIT_TASK_DATA</code>により定義される。
+定義をたどるのがめんどいので、<code>arch/riscv/kernel/vmlinux.lds.S</code>を事前にpreprocess(<code>arch/riscv/kernel/vmlinux.lds</code>)したものを用意した。
+<code>arch/riscv/kernel/vmlinux.lds</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm> <span class=nf>_data</span> <span class=err>=</span> <span class=p>.</span><span class=c>;
+</span><span class=c></span> <span class=p>.</span> <span class=err>=</span> <span class=no>ALIGN</span><span class=p>((</span><span class=mi>1</span> <span class=err>&lt;&lt;</span> <span class=p>(</span><span class=mi>12</span><span class=p>)))</span><span class=c>; .data : AT(ADDR(.data) - 0xC0000000) { . = ALIGN(((1 &lt;&lt; (12)) &lt;&lt; (1))); __start_init_task = .; init_thread_union = .; init_stack = .; KEEP(*(.data..init_task)) KEEP(*(.data..init_thread_info)) . = __start_init_task + ((1 &lt;&lt; (12)) &lt;&lt; (1)); __end_init_task = .; . = ALIGN((1 &lt;&lt; (12))); __nosave_begin = .; *(.data..nosave) . = ALIGN((1 &lt;&lt; (12))); __nosave_end = .; . = ALIGN((1 &lt;&lt; (12))); *(.data..page_aligned) . = ALIGN((1 &lt;&lt; (12))); . = ALIGN((1 &lt;&lt; 6)); *(.data..cacheline_aligned) . = ALIGN((1 &lt;&lt; 6)); *(.data..read_mostly) . = ALIGN((1 &lt;&lt; 6)); *(.xiptext) *(.data) *(.ref.data) *(.data..shared_aligned) *(.data.unlikely) __start_once = .; *(.data.once) __end_once = .; . = ALIGN(32); *(__tracepoints) . = ALIGN(8); __start___dyndbg = .; KEEP(*(__dyndbg)) __stop___dyndbg = .; CONSTRUCTORS } . = ALIGN(8); __bug_table : AT(ADDR(__bug_table) - 0xC0000000) { __start___bug_table = .; KEEP(*(__bug_table)) __stop___bug_table = .; }
+</span></code></pre></div><p>さらに面倒くさいので、kernelをnmして探す。</p><div class=highlight><pre class=chroma><code class=language-bash data-lang=bash>$ nm vmlinux<span class=p>|</span>grep init_thread_union
+c1400000 D init_thread_union
+</code></pre></div><p><code>init_thread_union</code>のアドレスは、<code>0xc1400000</code>である(Link Address)。</p><p>つまり、<code>sp</code>は(<code>0xc1400000 + 8192 = 0xc14002000</code>)(Link Address)となる。</p><p>ちなみに、<code>init_thread_union</code>は<code>include/linux/sched.h</code>て定義されている。
+<code>include/linux/sched.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>union</span> <span class=n>thread_union</span> <span class=p>{</span>
+<span class=cp>#ifndef CONFIG_ARCH_TASK_STRUCT_ON_STACK
+</span><span class=cp></span>	<span class=k>struct</span> <span class=n>task_struct</span> <span class=n>task</span><span class=p>;</span>
+<span class=cp>#endif
+</span><span class=cp>#ifndef CONFIG_THREAD_INFO_IN_TASK
+</span><span class=cp></span>	<span class=k>struct</span> <span class=n>thread_info</span> <span class=n>thread_info</span><span class=p>;</span>
+<span class=cp>#endif
+</span><span class=cp></span>	<span class=kt>unsigned</span> <span class=kt>long</span> <span class=n>stack</span><span class=p>[</span><span class=n>THREAD_SIZE</span><span class=o>/</span><span class=k>sizeof</span><span class=p>(</span><span class=kt>long</span><span class=p>)];</span>
+<span class=p>};</span>
+</code></pre></div><p>つまり、スタックか、<code>thread_info</code>構造体、<code>task_struct</code>と共用でメモリ領域を使用する。
+今回の場合はスタックである。サイズは<code>THREAD_SIZE</code>wordsなので、<code>THREAD_SIZE</code>を<code>init_thread_union</code>に加算することで、スタックの高位アドレスがわかる。</p><p>OpenSBIのロードアドレスは<code>0x80000000</code>である。
+Linux kernelのOpenSBIからのロードオフセットは<code>0x00400000</code>である。
+Linux kernelの開始のロードアドレスは<code>0x80400000</code>である。
+Linux kernelの開始のリンクアドレスは<code>0xc0000000</code>である。
+スタックのロードアドレスは<code>0x81802000</code>となる。(<code>0x80400000 + 0xc14002000 - 0xc0000000</code>)</p><p><span class=image-container><span class=link><a href=./image02.png target=_blank><img class=img src=./image02.png></a></span></span>
+第一引数(<code>a0</code>)にFDT PAをセットして、<code>setup_vm</code>関数を呼ぶ。</p><p>長くなってきたので、<code>setup_vm</code>は次回にする。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/linux/>Linux</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part2/><span class="iconfont icon-article"></span>Reading linux kernel part2</a></p><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/reading_opensbi_part7/><span class="iconfont icon-article"></span>Reading OpenSBI part7</a></p></section><section class="article discussion"><div id=disqus_thread></div><script type=application/javascript>var disqus_config=function(){};(function(){if(["localhost","127.0.0.1"].indexOf(window.location.hostname)!=-1){document.getElementById('disqus_thread').innerHTML='Disqus comments not available by default when the website is previewed locally.';return}var b=document,a=b.createElement('script');a.async=!0,a.src='//https-koyamanx-github-io-ck-dev.disqus.com/embed.js',a.setAttribute('data-timestamp',+new Date),(b.head||b.body).appendChild(a)})()</script><noscript>Please enable JavaScript to view the <a href=https://disqus.com/?ref_noscript>comments powered by Disqus.</a></noscript><a href=https://disqus.com class=dsq-brlink>comments powered by <span class=logo-disqus>Disqus</span></a></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>

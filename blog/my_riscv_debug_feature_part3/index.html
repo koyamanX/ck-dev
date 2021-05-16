@@ -1,0 +1,548 @@
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>My RISC-V debug feature part3&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="My RISC-V debug feature part3"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">My RISC-V debug feature part3</h1><p class="article date">Tuesday, April 20, 2021</p></section><article class="article markdown-body"><p>OpenOCD RISC-VにVJTAGのサポートを行う。
+OpenOCDにて、VJTAG on DE10-Liteにアクセスしてみる。</p><h3 id=openocdのvjtagサポート状況>OpenOCDのVJTAGサポート状況</h3><p>or1kはVJTAGに対応している。
+この実装を理解して、OpenOCD RISC-Vへ移植をする。</p><h3 id=openocd-vjtag-support-or1kの実装を読解する>OpenOCD VJTAG support (or1kの実装を読解する)</h3><p>まず、or1kでどのようにVJTAGを使っているのか確かめる。
+そのために、cfgファイルを読む。</p><p><code>tcl/target/or1k.cfg</code></p><div class=highlight><pre class=chroma><code class=language-tcl data-lang=tcl><span class=k>set</span>  _ENDIAN big
+
+<span class=k>if</span> <span class=k>{</span> <span class=k>[</span><span class=nb>info</span> exists CHIPNAME<span class=k>]</span> <span class=k>}</span> <span class=k>{</span>
+   <span class=k>set</span> _CHIPNAME <span class=nv>$CHIPNAME</span>
+<span class=k>}</span> <span class=k>else</span> <span class=k>{</span>
+   <span class=k>set</span> _CHIPNAME or1k
+<span class=k>}</span>
+
+<span class=k>if</span> <span class=k>{</span> <span class=k>[</span><span class=nb>info</span> exists TAP_TYPE<span class=k>]</span> <span class=k>}</span> <span class=k>{</span>
+   <span class=k>set</span> _TAP_TYPE <span class=nv>$TAP_TYPE</span>
+<span class=k>}</span> <span class=k>else</span> <span class=k>{</span>
+   <span class=nb>puts</span> <span class=s2>&#34;You need to select a tap type&#34;</span>
+   <span class=nv>shutdown</span>
+<span class=k>}</span>
+
+<span class=c># Configure the target
+</span><span class=c></span><span class=k>if</span> <span class=k>{</span> <span class=k>[</span><span class=nb>string</span> compare <span class=nv>$_TAP_TYPE</span> <span class=s2>&#34;VJTAG&#34;</span><span class=k>]</span> <span class=o>==</span> <span class=nv>0</span> <span class=k>}</span> <span class=k>{</span>
+	<span class=k>if</span> <span class=k>{</span> <span class=k>[</span><span class=nb>info</span> exists FPGATAPID<span class=k>]</span> <span class=k>}</span> <span class=k>{</span>
+	   <span class=k>set</span> _FPGATAPID <span class=nv>$FPGATAPID</span>
+	<span class=k>}</span> <span class=k>else</span> <span class=k>{</span>
+	   <span class=nb>puts</span> <span class=s2>&#34;You need to set your FPGA JTAG ID&#34;</span>
+		<span class=nv>shutdown</span>
+	<span class=k>}</span>
+
+	<span class=nv>jtag</span> newtap <span class=nv>$_CHIPNAME</span> cpu <span class=o>-</span>irlen <span class=mi>10</span> <span class=o>-</span>expected-id <span class=nv>$_FPGATAPID</span>
+
+	<span class=k>set</span> _TARGETNAME <span class=nv>$_CHIPNAME.cpu</span>
+	<span class=nv>target</span> create <span class=nv>$_TARGETNAME</span> or1k <span class=o>-</span>endian <span class=nv>$_ENDIAN</span> <span class=o>-</span>chain-position <span class=nv>$_TARGETNAME</span>
+
+	<span class=c># Select the TAP core we are using
+</span><span class=c></span>	<span class=nv>tap_select</span> vjtag
+<span class=k>}</span>
+</code></pre></div><p><code>tap_select vjtag</code>にてVJTAGをTAPとして選択するようである。
+<code>tap_select</code>コマンドはor1k向けに定義されたものであるため、<code>target</code>コマンドでor1kを選択してから
+でないと使用することができない。</p><p><code>tap_select</code>命令をまず、RISC-V向けに移植したい。</p><h3 id=tap_select命令の移植>tap_select命令の移植</h3><p><code>src/target/openrisc/or1k.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=k>const</span> <span class=k>struct</span> <span class=n>command_registration</span> <span class=n>or1k_hw_ip_command_handlers</span><span class=p>[]</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;tap_select&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>handler</span> <span class=o>=</span> <span class=n>or1k_tap_select_command_handler</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_ANY</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;name&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;Select the TAP core to use&#34;</span><span class=p>,</span>
+	<span class=p>},</span>
+
+</code></pre></div><p><code>src/target/openrisc/or1k.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=n>COMMAND_HANDLER</span><span class=p>(</span><span class=n>or1k_tap_select_command_handler</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span> <span class=o>=</span> <span class=n>get_current_target</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>);</span>
+	<span class=k>struct</span> <span class=n>or1k_common</span> <span class=o>*</span><span class=n>or1k</span> <span class=o>=</span> <span class=n>target_to_or1k</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+	<span class=k>struct</span> <span class=n>or1k_jtag</span> <span class=o>*</span><span class=n>jtag</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>or1k</span><span class=o>-&gt;</span><span class=n>jtag</span><span class=p>;</span>
+	<span class=k>struct</span> <span class=n>or1k_tap_ip</span> <span class=o>*</span><span class=n>or1k_tap</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>CMD_ARGC</span> <span class=o>!=</span> <span class=mi>1</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_COMMAND_SYNTAX_ERROR</span><span class=p>;</span>
+
+	<span class=n>list_for_each_entry</span><span class=p>(</span><span class=n>or1k_tap</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>tap_list</span><span class=p>,</span> <span class=n>list</span><span class=p>)</span> <span class=p>{</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>or1k_tap</span><span class=o>-&gt;</span><span class=n>name</span><span class=p>)</span> <span class=p>{</span>
+			<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>strcmp</span><span class=p>(</span><span class=n>CMD_ARGV</span><span class=p>[</span><span class=mi>0</span><span class=p>],</span> <span class=n>or1k_tap</span><span class=o>-&gt;</span><span class=n>name</span><span class=p>))</span> <span class=p>{</span>
+				<span class=n>jtag</span><span class=o>-&gt;</span><span class=n>tap_ip</span> <span class=o>=</span> <span class=n>or1k_tap</span><span class=p>;</span>
+				<span class=n>LOG_INFO</span><span class=p>(</span><span class=s>&#34;%s tap selected&#34;</span><span class=p>,</span> <span class=n>or1k_tap</span><span class=o>-&gt;</span><span class=n>name</span><span class=p>);</span>
+				<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+			<span class=p>}</span>
+		<span class=p>}</span>
+	<span class=p>}</span>
+
+	<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;%s unknown, no tap selected&#34;</span><span class=p>,</span> <span class=n>CMD_ARGV</span><span class=p>[</span><span class=mi>0</span><span class=p>]);</span>
+	<span class=k>return</span> <span class=n>ERROR_COMMAND_SYNTAX_ERROR</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><p><code>tap_select</code>コマンドは、<code>or1k_tap_select_command_handler</code>が対処する。
+<code>tap_select</code>コマンドの第一引数にあるインターフェースを使用する。
+VJTAGを選択した場合を見てみる。</p><p><code>src/target/openrisc/or1k_tap_vjtag.c</code>で実装されている。
+<code>or1k_tap_vjtag_init</code>が初期化用の処理である。</p><div class=highlight><pre class=chroma><code class=language-C data-lang=C>	<span class=n>jtag_add_tlr</span><span class=p>();</span>
+</code></pre></div><p>まずは、TAPを初期状態にする。</p><div class=highlight><pre class=chroma><code class=language-C data-lang=C>	<span class=n>uint8_t</span> <span class=n>t</span><span class=p>[</span><span class=mi>4</span><span class=p>]</span> <span class=o>=</span> <span class=p>{</span> <span class=mi>0</span> <span class=p>};</span>
+	<span class=k>struct</span> <span class=n>scan_field</span> <span class=n>field</span><span class=p>;</span>
+	<span class=k>struct</span> <span class=n>jtag_tap</span> <span class=o>*</span><span class=n>tap</span> <span class=o>=</span> <span class=n>jtag_info</span><span class=o>-&gt;</span><span class=n>tap</span><span class=p>;</span>
+
+	<span class=cm>/* Select VIR */</span>
+	<span class=n>buf_set_u32</span><span class=p>(</span><span class=n>t</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>,</span> <span class=n>ALTERA_CYCLONE_CMD_USER1</span><span class=p>);</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>t</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>jtag_add_ir_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+</code></pre></div><p>その後、sld_hubのIRを<code>USER1</code>にする。
+この操作で、Select_IRを行い、Shift_IRにて、sld_hubのIRに<code>USER1</code>のコード(0xE, 10 bit)を書き込む。</p><p>次に、DR Shiftを行う。
+<code>USER1</code>レジスタのフォーマットは以下のようになっている。
+<span class=image-container><span class=link><a href=./image00.png target=_blank><img class=img src=./image00.png></a></span></span>
+ただし、nはCEIL(log2(Number of SLD_nodes + 1))である。
+mは各VIRの長さの最大値である。
+<code>sld_hub</code>には以下のレジスタがある。</p><ul><li><code>SLD HUB IP Configuration Register</code><ul><li>sld_hubに接続されているsld_nodeの情報や、USER1 DRの寸法がわかる。</li></ul></li><li>各<code>sld_hub</code>の<code>SLD_NODE_INFO</code>レジスタ<ul><li>indexとアドレスのマッピングがわかる
+<code>HUB_INFO</code>命令を使用し、<code>HUB IP Configuration Register</code>を読み出す。
+また、各sld_nodeのアドレスマッピングを保持している、<code>SLD_NODE_INFO</code>レジスタがある。
+ただし、この時点でsld_hubに接続されたsld_nodeの数がわからない。
+また、n, mについてもわからない状態である。
+そこで、USER1 DRをゼロで埋める。
+nがわからないが、64回シフトすれば大体の場合は十分である。</li></ul></li></ul><div class=highlight><pre class=chroma><code class=language-C data-lang=C>	<span class=cm>/* Select the SLD Hub */</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=mi>64</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>jtag_add_dr_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+</code></pre></div><p>次に、Select_DRにて、DR(<code>SLD HUB Configuration register</code>)を選択する。</p><div class=highlight><pre class=chroma><code class=language-C data-lang=C>	<span class=cm>/* Select VDR */</span>
+	<span class=n>buf_set_u32</span><span class=p>(</span><span class=n>t</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>,</span> <span class=n>ALTERA_CYCLONE_CMD_USER0</span><span class=p>);</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>t</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>jtag_add_ir_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+
+	<span class=kt>int</span> <span class=n>retval</span> <span class=o>=</span> <span class=n>jtag_execute_queue</span><span class=p>();</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>retval</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>retval</span><span class=p>;</span>
+</code></pre></div><p><code>jtag_execute_queue</code>にて、JTAGコマンドを実行する。</p><p>次に、<code>SLD HUB Configuration register</code>を読み出す。
+レジスタのフォーマットは以下のとおりである。
+<span class=image-container><span class=link><a href=./image01.png target=_blank><img class=img src=./image01.png></a></span></span>
+8つのnibbleのフィールドからなるレジスタであり、nibble単位での読み出しが必須となる。:w
+次のnibbleを読み出す前に、UPDATE_DRをする必要がある。
+そこで、読み出しごとに<code>jtag_execute_queue</code>を行う。</p><div class=highlight><pre class=chroma><code class=language-C data-lang=C>	<span class=n>uint8_t</span> <span class=n>nibble</span><span class=p>;</span>
+	<span class=n>uint32_t</span> <span class=n>hub_info</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+
+	<span class=k>for</span> <span class=p>(</span><span class=kt>int</span> <span class=n>i</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span> <span class=n>i</span> <span class=o>&lt;</span> <span class=mi>8</span><span class=p>;</span> <span class=n>i</span><span class=o>++</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=mi>4</span><span class=p>;</span>
+		<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+		<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>nibble</span><span class=p>;</span>
+		<span class=n>jtag_add_dr_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+		<span class=n>retval</span> <span class=o>=</span> <span class=n>jtag_execute_queue</span><span class=p>();</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>retval</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+			<span class=k>return</span> <span class=n>retval</span><span class=p>;</span>
+		<span class=n>hub_info</span> <span class=o>=</span> <span class=p>((</span><span class=n>hub_info</span> <span class=o>&gt;&gt;</span> <span class=mi>4</span><span class=p>)</span> <span class=o>|</span> <span class=p>((</span><span class=n>nibble</span> <span class=o>&amp;</span> <span class=mh>0xf</span><span class=p>)</span> <span class=o>&lt;&lt;</span> <span class=mi>28</span><span class=p>));</span>
+	<span class=p>}</span>
+
+	<span class=kt>int</span> <span class=n>nb_nodes</span> <span class=o>=</span> <span class=n>NB_NODES</span><span class=p>(</span><span class=n>hub_info</span><span class=p>);</span>
+	<span class=kt>int</span> <span class=n>m_width</span> <span class=o>=</span> <span class=n>M_WIDTH</span><span class=p>(</span><span class=n>hub_info</span><span class=p>);</span>
+
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;SLD HUB Configuration register&#34;</span><span class=p>);</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;------------------------------&#34;</span><span class=p>);</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;m_width         = %d&#34;</span><span class=p>,</span> <span class=n>m_width</span><span class=p>);</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;manufacturer_id = 0x%02&#34;</span> <span class=n>PRIx32</span><span class=p>,</span> <span class=n>MANUF</span><span class=p>(</span><span class=n>hub_info</span><span class=p>));</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;nb_of_node      = %d&#34;</span><span class=p>,</span> <span class=n>nb_nodes</span><span class=p>);</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;version         = %&#34;</span> <span class=n>PRIu32</span><span class=p>,</span> <span class=n>VER</span><span class=p>(</span><span class=n>hub_info</span><span class=p>));</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;VIR length      = %d&#34;</span><span class=p>,</span> <span class=n>guess_addr_width</span><span class=p>(</span><span class=n>nb_nodes</span><span class=p>)</span> <span class=o>+</span> <span class=n>m_width</span><span class=p>);</span>
+</code></pre></div><p>これで、sld_nodeの数、m, nのサイズ、VIRのサイズなどがわかった。</p><p>次に、インデックス(VJTAGのインスタンス時にユーザもしくはQuartusが割当)からアドレスへのマッピングを調べる。
+<code>SLD_NODE info Register</code>に情報が格納されており、sld_nodeの数分存在する。
+このレジスタも同様に8つのnibbleからなる。
+つまり、<code>ノードの数 * (8 * nibble)</code>回シフトが必要である。</p><span class=image-container><span class=link><a href=./image02.png target=_blank><img class=img src=./image02.png></a></span></span><div class=highlight><pre class=chroma><code class=language-C data-lang=C>	<span class=kt>int</span> <span class=n>vjtag_node_address</span> <span class=o>=</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+	<span class=kt>int</span> <span class=n>node_index</span><span class=p>;</span>
+	<span class=n>uint32_t</span> <span class=n>node_info</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=k>for</span> <span class=p>(</span><span class=n>node_index</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span> <span class=n>node_index</span> <span class=o>&lt;</span> <span class=n>nb_nodes</span><span class=p>;</span> <span class=n>node_index</span><span class=o>++</span><span class=p>)</span> <span class=p>{</span>
+
+		<span class=k>for</span> <span class=p>(</span><span class=kt>int</span> <span class=n>i</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span> <span class=n>i</span> <span class=o>&lt;</span> <span class=mi>8</span><span class=p>;</span> <span class=n>i</span><span class=o>++</span><span class=p>)</span> <span class=p>{</span>
+			<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=mi>4</span><span class=p>;</span>
+			<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+			<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>nibble</span><span class=p>;</span>
+			<span class=n>jtag_add_dr_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+			<span class=n>retval</span> <span class=o>=</span> <span class=n>jtag_execute_queue</span><span class=p>();</span>
+			<span class=k>if</span> <span class=p>(</span><span class=n>retval</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+				<span class=k>return</span> <span class=n>retval</span><span class=p>;</span>
+			<span class=n>node_info</span> <span class=o>=</span> <span class=p>((</span><span class=n>node_info</span> <span class=o>&gt;&gt;</span> <span class=mi>4</span><span class=p>)</span> <span class=o>|</span> <span class=p>((</span><span class=n>nibble</span> <span class=o>&amp;</span> <span class=mh>0xf</span><span class=p>)</span> <span class=o>&lt;&lt;</span> <span class=mi>28</span><span class=p>));</span>
+		<span class=p>}</span>
+
+		<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;Node info register&#34;</span><span class=p>);</span>
+		<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;--------------------&#34;</span><span class=p>);</span>
+		<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;instance_id     = %&#34;</span> <span class=n>PRIu32</span><span class=p>,</span> <span class=n>ID</span><span class=p>(</span><span class=n>node_info</span><span class=p>));</span>
+		<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;manufacturer_id = 0x%02&#34;</span> <span class=n>PRIx32</span><span class=p>,</span> <span class=n>MANUF</span><span class=p>(</span><span class=n>node_info</span><span class=p>));</span>
+		<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;node_id         = %&#34;</span> <span class=n>PRIu32</span> <span class=s>&#34; (%s)&#34;</span><span class=p>,</span> <span class=n>ID</span><span class=p>(</span><span class=n>node_info</span><span class=p>),</span>
+						       <span class=n>id_to_string</span><span class=p>(</span><span class=n>ID</span><span class=p>(</span><span class=n>node_info</span><span class=p>)));</span>
+		<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;version         = %&#34;</span> <span class=n>PRIu32</span><span class=p>,</span> <span class=n>VER</span><span class=p>(</span><span class=n>node_info</span><span class=p>));</span>
+
+		<span class=k>if</span> <span class=p>(</span><span class=n>ID</span><span class=p>(</span><span class=n>node_info</span><span class=p>)</span> <span class=o>==</span> <span class=n>VJTAG_NODE_ID</span><span class=p>)</span>
+			<span class=n>vjtag_node_address</span> <span class=o>=</span> <span class=n>node_index</span> <span class=o>+</span> <span class=mi>1</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>vjtag_node_address</span> <span class=o>&lt;</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;No VJTAG TAP instance found !&#34;</span><span class=p>);</span>
+</code></pre></div><p>これでアドレスがわかった。
+次に、sld_nodeのインスタンスのVIR, VDRにアクセスをする。</p><p>まず、<code>USER1</code>命令を発行する。
+これにより、IR chainが選択される。</p><div class=highlight><pre class=chroma><code class=language-C data-lang=C>	<span class=cm>/* Select VIR */</span>
+	<span class=n>buf_set_u32</span><span class=p>(</span><span class=n>t</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>,</span> <span class=n>ALTERA_CYCLONE_CMD_USER1</span><span class=p>);</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>t</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>jtag_add_ir_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+</code></pre></div><p>次に、sld_nodeのVIRに命令を送る。
+この場合はDEBUG命令を転送している。
+これは、or1kのデバックモードの命令の様子。
+なお、転送サイズは<code>アドレスのサイズ+VIRのサイズ</code>である。
+VIRの前に、Addressを付与する。
+フォーマットを以下に示す。
+<span class=image-container><span class=link><a href=./image03.png target=_blank><img class=img src=./image03.png></a></span></span></p><div class=highlight><pre class=chroma><code class=language-C data-lang=C><span class=cm>/* Send the DEBUG command to the VJTAG IR */</span>
+	<span class=kt>int</span> <span class=n>dr_length</span> <span class=o>=</span> <span class=n>guess_addr_width</span><span class=p>(</span><span class=n>nb_nodes</span><span class=p>)</span> <span class=o>+</span> <span class=n>m_width</span><span class=p>;</span>
+	<span class=n>buf_set_u32</span><span class=p>(</span><span class=n>t</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>dr_length</span><span class=p>,</span> <span class=p>(</span><span class=n>vjtag_node_address</span> <span class=o>&lt;&lt;</span> <span class=n>m_width</span><span class=p>)</span> <span class=o>|</span> <span class=n>ALT_VJTAG_CMD_DEBUG</span><span class=p>);</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=n>dr_length</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>t</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>jtag_add_dr_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+</code></pre></div><p>最後に、<code>USER0</code>命令を発行して、DR chainに切り替える。
+これにより、後続のShift_DEは、<code>USER1</code>命令でセットした、Addrを用いてsld_nodeのインスタンスに転送される。
+なお、or1kの場合では、VIRをDEBUGから変えることはないようである。
+しかし、VIRを変える場合は、<code>USER1</code>を発行して、ADDR+VIRを転送し、<code>USER0</code>へ切り替えるという手順が必要となる。
+この切り替え部分をRISC-VのOpenOCDへ追加する必要がある。
+DRのアクセスは切り替えが正しくできていれば、問題ないはずである。</p><div class=highlight><pre class=chroma><code class=language-C data-lang=C><span class=cm>/* Select the VJTAG DR */</span>
+	<span class=n>buf_set_u32</span><span class=p>(</span><span class=n>t</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>,</span> <span class=n>ALTERA_CYCLONE_CMD_USER0</span><span class=p>);</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>t</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>jtag_add_ir_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=nf>jtag_execute_queue</span><span class=p>();</span>
+<span class=p>}</span>
+</code></pre></div><h3 id=openocd-vjtag-support>OpenOCD VJTAG support</h3><p>詳しい追加は<a href=https://github.com/koyamanX/riscv-openocd target=_blank rel="noopener noreferrer">koyamanX/riscv-openocd</a>
+にある、
+<code>src/target/riscv/riscv_tap_vjtag.c</code>を確認してほしい。
+初期化用のコードは、<code>or1k_tap_vjtag_init</code>をそのまま流用する。
+関数名を<code>riscv_tap_vjtag_init</code>とする。
+また、DEBUGレジスタの指定を、DTMCSレジスタの指定に変更する。
+これで初期化は十分である。
+一部、変数(nb_nodesなど)を雑にグローバル変数にした。
+また、VIRの書き込み用の関数を別に定義した。</p><p><code>src/target/riscv/riscv_tap_vjtag.c</code></p><div class=highlight><pre class=chroma><code class=language-C data-lang=C><span class=kt>int</span> <span class=nf>vjtag_vir_scan</span><span class=p>(</span><span class=k>struct</span> <span class=n>jtag_tap</span> <span class=o>*</span><span class=n>tap</span><span class=p>,</span> <span class=n>uint32_t</span> <span class=n>vir_val</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>uint8_t</span> <span class=n>t</span><span class=p>[</span><span class=mi>4</span><span class=p>]</span> <span class=o>=</span> <span class=p>{</span> <span class=mi>0</span> <span class=p>};</span>
+	<span class=k>struct</span> <span class=n>scan_field</span> <span class=n>field</span><span class=p>;</span>
+
+	<span class=cm>/* Select VIR chain */</span>
+	<span class=n>buf_set_u32</span><span class=p>(</span><span class=n>t</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>,</span> <span class=n>ALTERA_CYCLONE_CMD_USER1</span><span class=p>);</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>t</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>jtag_add_ir_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+
+	<span class=cm>/* Set VIR Value to the VIR of sld_node determined by vjtag_node_address */</span>
+	<span class=kt>int</span> <span class=n>dr_length</span> <span class=o>=</span> <span class=n>guess_addr_width</span><span class=p>(</span><span class=n>nb_nodes</span><span class=p>)</span> <span class=o>+</span> <span class=n>m_width</span><span class=p>;</span>
+	<span class=n>buf_set_u32</span><span class=p>(</span><span class=n>t</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>dr_length</span><span class=p>,</span> <span class=p>(</span><span class=n>vjtag_node_address</span> <span class=o>&lt;&lt;</span> <span class=n>m_width</span><span class=p>)</span> <span class=o>|</span> <span class=n>vir_val</span><span class=p>);</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=n>dr_length</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>t</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>jtag_add_dr_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+
+	<span class=cm>/* Select the VJTAG DR chain */</span>
+	<span class=n>buf_set_u32</span><span class=p>(</span><span class=n>t</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>,</span> <span class=n>ALTERA_CYCLONE_CMD_USER0</span><span class=p>);</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>num_bits</span> <span class=o>=</span> <span class=n>tap</span><span class=o>-&gt;</span><span class=n>ir_length</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>out_value</span> <span class=o>=</span> <span class=n>t</span><span class=p>;</span>
+	<span class=n>field</span><span class=p>.</span><span class=n>in_value</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+	<span class=n>jtag_add_ir_scan</span><span class=p>(</span><span class=n>tap</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>field</span><span class=p>,</span> <span class=n>TAP_IDLE</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=n>jtag_execute_queue</span><span class=p>();</span>
+<span class=p>}</span>
+</code></pre></div><p><code>src/target/riscv/riscv.c</code>を変更し、targetの初期化の際に、ついでに<code>riscv_tap_vjtag_init</code>を呼び出すことにした。
+また、<code>use_vjtag</code>フラグで、VJTAGを使用するかをハードコードした。
+本来は、このフラグを<code>tap_select</code>のような命令で変更できるようにするべきである。
+しかし、<code>target</code>固有のコマンドは<code>target</code>の初期化が終わっていこうに使えるようになる。
+ただし、<code>target</code>初期化の処理は、<code>examine</code>(JTAGでDebug Moduleへアクセスし、dmactiveを取得する)が成功したら
+正しく完了したこととなる。
+VJTAGを用いたアクセスでないため、必ず失敗する。
+そこで、とりあえず、動けばいいという適当な考えで、ハードコードしてしまった。
+正しく動くことが確認できたら、しっかりと対応しテストしてPRを出したいね。</p><h3 id=通信テスト>通信テスト</h3><p>VJTAGとOpenOCDでやり取りをする。
+適当なDebug Moduleのような回路を書く。
+コードは<a href=https://github.com/koyamanX/riscv-debug target=_blank rel="noopener noreferrer">koyamanX/riscv-openocd</a>
+にある。
+なお、DM(Debug Module)やDTM(Debug Transport Module)はJTAGのTCKのクロックドメインで動作していることに注意。
+プロセッサと接続するためには、適切にCDC(Clock Domain Crossing)を行う必要がある。
+また、DMに関しては、まだスタブである。</p><p><code>src/dtm.nsl</code></p><div class=highlight><pre class=chroma><code class=language-C data-lang=C><span class=cp>#ifndef DTM_H
+</span><span class=cp>#define DTM_H
+</span><span class=cp></span>
+<span class=cm>/* This module design to run in TCK in JTAG clock domain */</span>
+<span class=cm>/* m_clock must be connected to TCK of JTAG */</span>
+
+<span class=cp>#define IDCODE		5&#39;b00001
+</span><span class=cp>#define DTMCS		5&#39;b10000
+</span><span class=cp>#define DMI			5&#39;b10001
+</span><span class=cp>#define BYPASS		5&#39;b11111
+</span><span class=cp></span>
+<span class=cp>#define DTMCS_VERSION	4&#39;b0001
+</span><span class=cp>#define DTMCS_ABITS		6&#39;b100000
+</span><span class=cp></span>
+<span class=cp>#define DMI_NOP			2&#39;b00
+</span><span class=cp>#define DMI_READ		2&#39;b01
+</span><span class=cp>#define DMI_WRITE		2&#39;b10
+</span><span class=cp>#define DMI_RESERVED	2&#39;b11
+</span><span class=cp></span>
+<span class=cp>#define DMI_STAT_SUCCESS	2&#39;b00
+</span><span class=cp>#define DMI_STAT_RESERVED	2&#39;b01
+</span><span class=cp>#define DMI_STAT_FAILURE	2&#39;b10
+</span><span class=cp>#define DMI_STAT_INPROGRESS	2&#39;b11
+</span><span class=cp></span>
+<span class=k>struct</span> <span class=n>dtmcs_t</span> <span class=p>{</span>
+	<span class=n>zero1</span><span class=p>[</span><span class=mi>14</span><span class=p>];</span>
+	<span class=n>dmihardreset</span><span class=p>[</span><span class=mi>1</span><span class=p>];</span>
+	<span class=n>dmireset</span><span class=p>[</span><span class=mi>1</span><span class=p>];</span>
+	<span class=n>zero0</span><span class=p>[</span><span class=mi>1</span><span class=p>];</span>
+	<span class=n>idle</span><span class=p>[</span><span class=mi>3</span><span class=p>];</span>
+	<span class=n>dmistat</span><span class=p>[</span><span class=mi>2</span><span class=p>];</span>
+	<span class=n>abits</span><span class=p>[</span><span class=mi>6</span><span class=p>];</span>
+	<span class=n>version</span><span class=p>[</span><span class=mi>4</span><span class=p>];</span>
+<span class=p>};</span>
+
+<span class=k>struct</span> <span class=n>dmi_t</span> <span class=p>{</span>
+	<span class=n>addr</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+	<span class=n>data</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+	<span class=n>op</span><span class=p>[</span><span class=mi>2</span><span class=p>];</span>
+<span class=p>};</span>
+
+<span class=n>declare</span> <span class=n>dtm</span> <span class=n>interface</span> <span class=p>{</span>
+	<span class=n>input</span> <span class=n>m_clock</span><span class=p>;</span>
+	<span class=n>input</span> <span class=n>p_reset</span><span class=p>;</span>
+
+	<span class=n>input</span> <span class=n>ir_in</span><span class=p>[</span><span class=mi>5</span><span class=p>];</span>
+	<span class=n>output</span> <span class=n>ir_out</span><span class=p>[</span><span class=mi>5</span><span class=p>];</span>
+	<span class=n>input</span> <span class=n>tdi</span><span class=p>;</span>
+	<span class=n>output</span> <span class=n>tdo</span><span class=p>;</span>
+	<span class=n>func_in</span> <span class=n>virtual_state_cdr</span><span class=p>;</span>
+	<span class=n>func_in</span>	<span class=n>virtual_state_sdr</span><span class=p>;</span>
+	<span class=n>func_in</span>	<span class=n>virtual_state_e1dr</span><span class=p>;</span>
+	<span class=n>func_in</span>	<span class=n>virtual_state_pdr</span><span class=p>;</span>
+	<span class=n>func_in</span>	<span class=n>virtual_state_e2dr</span><span class=p>;</span>
+	<span class=n>func_in</span>	<span class=n>virtual_state_udr</span><span class=p>;</span>
+	<span class=n>func_in</span>	<span class=n>virtual_state_cir</span><span class=p>;</span>
+	<span class=n>func_in</span>	<span class=n>virtual_state_uir</span><span class=p>;</span>
+
+	<span class=cm>/* DMI */</span>
+	<span class=n>output</span> <span class=n>addr</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+	<span class=n>input</span> <span class=n>rdata</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+	<span class=n>output</span> <span class=n>wdata</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+	<span class=n>func_out</span> <span class=nf>read</span><span class=p>(</span><span class=n>addr</span><span class=p>);</span>
+	<span class=n>func_out</span> <span class=nf>write</span><span class=p>(</span><span class=n>addr</span><span class=p>,</span> <span class=n>wdata</span><span class=p>);</span>
+	<span class=n>func_in</span> <span class=nf>ready</span><span class=p>();</span>
+
+<span class=cp>#ifdef DEBUG
+</span><span class=cp></span>	<span class=n>output</span> <span class=n>debug_out</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+<span class=cp>#endif
+</span><span class=cp></span><span class=p>}</span>
+
+<span class=cp>#endif
+</span></code></pre></div><p><code>src/dtm.nsl</code></p><div class=highlight><pre class=chroma><code class=language-C data-lang=C><span class=cp>#include</span> <span class=cpf>&#34;dtm.h&#34;</span><span class=cp>
+</span><span class=cp></span>
+<span class=n>module</span> <span class=n>dtm</span> <span class=p>{</span>
+	<span class=n>reg</span> <span class=n>ir</span><span class=p>[</span><span class=mi>5</span><span class=p>]</span> <span class=o>=</span> <span class=n>IDCODE</span><span class=p>;</span>	<span class=cm>/* IDECODE (defined by spec) */</span>
+	<span class=n>reg</span> <span class=n>idcode</span><span class=p>[</span><span class=mi>32</span><span class=p>]</span> <span class=o>=</span> <span class=mh>0x10e31913</span><span class=p>;</span>	<span class=cm>/* same as SiFive&#39;s */</span>
+	<span class=n>reg</span> <span class=n>bypass</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	
+	<span class=cm>/* DTMCS register */</span>
+	<span class=n>dtmcs_t</span> <span class=n>reg</span> <span class=n>dtmcs</span> <span class=o>=</span> <span class=p>{</span><span class=mi>14</span><span class=err>&#39;</span><span class=n>b00000000000000</span><span class=p>,</span> <span class=mi>1</span><span class=err>&#39;</span><span class=n>b0</span><span class=p>,</span> <span class=mi>1</span><span class=err>&#39;</span><span class=n>b0</span><span class=p>,</span> <span class=mi>1</span><span class=err>&#39;</span><span class=n>b0</span><span class=p>,</span> <span class=mi>3</span><span class=err>&#39;</span><span class=n>b000</span><span class=p>,</span> <span class=mi>2</span><span class=err>&#39;</span><span class=n>b00</span><span class=p>,</span> <span class=n>DTMCS_ABITS</span><span class=p>,</span> <span class=n>DTMCS_VERSION</span><span class=p>};</span>
+	<span class=cm>/* DTMCS internal register for read via dtmcs(Capture-DR) */</span>
+	<span class=n>reg</span> <span class=n>dtmcs_dmistat</span><span class=p>[</span><span class=mi>2</span><span class=p>]</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=n>reg</span> <span class=n>dtmcs_idle</span><span class=p>[</span><span class=mi>3</span><span class=p>]</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=n>reg</span> <span class=n>dtmcs_dmireset</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=n>reg</span> <span class=n>dtmcs_dmihardreset</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=cm>/* DMI register */</span>
+	<span class=n>dmi_t</span> <span class=n>reg</span> <span class=n>dmi</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=cm>/* DMI internal register for read via dmi(Capture-DR) */</span>
+	<span class=n>reg</span> <span class=n>dmi_op_stat</span><span class=p>[</span><span class=mi>2</span><span class=p>]</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=n>reg</span> <span class=n>dmi_addr</span><span class=p>[</span><span class=mi>32</span><span class=p>]</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=n>reg</span> <span class=n>dmi_data</span><span class=p>[</span><span class=mi>32</span><span class=p>]</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+
+	<span class=n>func</span> <span class=n>virtual_state_uir</span> <span class=p>{</span>
+		<span class=nl>ir</span> <span class=p>:</span><span class=o>=</span> <span class=n>ir_in</span><span class=p>;</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>virtual_state_cir</span> <span class=p>{</span>
+		<span class=n>ir_out</span> <span class=o>=</span> <span class=n>IDCODE</span><span class=p>;</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>virtual_state_udr</span> <span class=p>{</span>
+		<span class=cm>/* At this point, we can issue abstarct command */</span>
+		<span class=n>any</span> <span class=p>{</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>DTMCS</span><span class=p>:</span> <span class=p>{</span>
+				<span class=cm>/* TODO: Implement hardreset */</span>
+				<span class=k>if</span><span class=p>(</span><span class=n>dtmcs</span><span class=p>.</span><span class=n>dmihardreset</span><span class=p>)</span> <span class=p>{</span>
+					<span class=nl>dtmcs_dmireset</span> <span class=p>:</span><span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+				<span class=p>}</span> <span class=k>else</span> <span class=k>if</span><span class=p>(</span><span class=n>dtmcs</span><span class=p>.</span><span class=n>dmireset</span><span class=p>)</span> <span class=p>{</span>
+					<span class=nl>dtmcs_dmireset</span> <span class=p>:</span><span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+					<span class=nl>dmi_op_stat</span> <span class=p>:</span><span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+				<span class=p>}</span>
+			<span class=p>}</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>DMI</span><span class=p>:</span> <span class=p>{</span>
+				<span class=n>any</span> <span class=p>{</span>
+					<span class=n>dmi</span><span class=p>.</span><span class=n>op</span> <span class=o>==</span> <span class=nl>DMI_NOP</span><span class=p>:</span> <span class=p>{</span><span class=nl>dmi_op_stat</span> <span class=p>:</span><span class=o>=</span> <span class=n>DMI_STAT_SUCCESS</span><span class=p>;}</span>
+					<span class=n>dmi</span><span class=p>.</span><span class=n>op</span> <span class=o>==</span> <span class=nl>DMI_READ</span><span class=p>:</span> <span class=p>{</span>
+						<span class=nl>dmi_addr</span> <span class=p>:</span><span class=o>=</span> <span class=n>dmi</span><span class=p>.</span><span class=n>addr</span><span class=p>;</span>
+						<span class=n>read</span><span class=p>(</span><span class=n>dmi</span><span class=p>.</span><span class=n>addr</span><span class=p>);</span>
+					<span class=p>}</span>
+					<span class=n>dmi</span><span class=p>.</span><span class=n>op</span> <span class=o>==</span> <span class=nl>DMI_WRITE</span><span class=p>:</span> <span class=p>{</span>
+						<span class=nl>dmi_addr</span> <span class=p>:</span><span class=o>=</span> <span class=n>dmi</span><span class=p>.</span><span class=n>addr</span><span class=p>;</span>
+						<span class=nl>dmi_data</span> <span class=p>:</span><span class=o>=</span> <span class=n>dmi</span><span class=p>.</span><span class=n>data</span><span class=p>;</span>
+						<span class=n>write</span><span class=p>(</span><span class=n>dmi</span><span class=p>.</span><span class=n>addr</span><span class=p>,</span> <span class=n>dmi</span><span class=p>.</span><span class=n>data</span><span class=p>);</span>
+					<span class=p>}</span>
+					<span class=n>dmi</span><span class=p>.</span><span class=n>op</span> <span class=o>==</span> <span class=nl>DMI_RESERVED</span><span class=p>:</span> <span class=p>{</span><span class=nl>dmi_op_stat</span> <span class=p>:</span><span class=o>=</span> <span class=n>DMI_STAT_FAILURE</span><span class=p>;}</span>
+				<span class=p>}</span>
+			<span class=p>}</span>
+		<span class=p>}</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>ready</span> <span class=p>{</span>
+		<span class=nl>dmi_data</span> <span class=p>:</span><span class=o>=</span> <span class=n>rdata</span><span class=p>;</span>
+		<span class=nl>dmi_op_stat</span> <span class=p>:</span><span class=o>=</span> <span class=n>DMI_STAT_SUCCESS</span><span class=p>;</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>virtual_state_cdr</span> <span class=p>{</span>
+		<span class=n>any</span> <span class=p>{</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>DTMCS</span><span class=p>:</span> <span class=nl>dtmcs</span> <span class=p>:</span><span class=o>=</span> <span class=p>{</span><span class=mi>14</span><span class=err>&#39;</span><span class=p>(</span><span class=mi>1</span><span class=err>&#39;</span><span class=n>b0</span><span class=p>),</span> <span class=n>dtmcs_dmihardreset</span><span class=p>,</span> <span class=n>dtmcs_dmireset</span><span class=p>,</span> <span class=mi>1</span><span class=err>&#39;</span><span class=n>b0</span><span class=p>,</span> 
+									<span class=n>dtmcs_idle</span><span class=p>,</span> <span class=n>dtmcs_dmistat</span><span class=p>,</span> <span class=n>DTMCS_ABITS</span><span class=p>,</span> <span class=n>DTMCS_VERSION</span><span class=p>};</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>DMI</span><span class=p>:</span> <span class=nl>dmi</span> <span class=p>:</span><span class=o>=</span> <span class=p>{</span><span class=n>dmi_addr</span><span class=p>,</span> <span class=n>dmi_data</span><span class=p>,</span> <span class=n>dmi_op_stat</span><span class=p>};</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>IDCODE</span><span class=p>:</span> <span class=nl>idcode</span> <span class=p>:</span><span class=o>=</span> <span class=mh>0x10e31913</span><span class=p>;</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>BYPASS</span><span class=p>:</span> <span class=nl>bypass</span> <span class=p>:</span><span class=o>=</span> <span class=mi>1</span><span class=err>&#39;</span><span class=n>b0</span><span class=p>;</span>
+			<span class=k>else</span><span class=o>:</span> <span class=nl>bypass</span> <span class=p>:</span><span class=o>=</span> <span class=mi>1</span><span class=err>&#39;</span><span class=n>b0</span><span class=p>;</span>
+		<span class=p>}</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>virtual_state_sdr</span> <span class=p>{</span>
+		<span class=n>any</span> <span class=p>{</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>DTMCS</span><span class=p>:</span> <span class=nl>dtmcs</span> <span class=p>:</span><span class=o>=</span> <span class=p>{</span><span class=n>tdi</span><span class=p>,</span> <span class=n>dtmcs</span><span class=p>[</span><span class=mi>31</span><span class=o>:</span><span class=mi>1</span><span class=p>]};</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>DMI</span><span class=p>:</span> <span class=nl>dmi</span> <span class=p>:</span><span class=o>=</span> <span class=p>{</span><span class=n>tdi</span><span class=p>,</span> <span class=n>dmi</span><span class=p>[</span><span class=mi>65</span><span class=o>:</span><span class=mi>1</span><span class=p>]};</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>IDCODE</span><span class=p>:</span> <span class=nl>idcode</span> <span class=p>:</span><span class=o>=</span> <span class=p>{</span><span class=n>tdi</span><span class=p>,</span> <span class=n>idcode</span><span class=p>[</span><span class=mi>31</span><span class=o>:</span><span class=mi>1</span><span class=p>]};</span>
+			<span class=n>ir</span> <span class=o>==</span> <span class=nl>BYPASS</span><span class=p>:</span> <span class=nl>bypass</span> <span class=p>:</span><span class=o>=</span> <span class=n>tdi</span><span class=p>;</span>
+			<span class=k>else</span><span class=o>:</span> <span class=nl>bypass</span> <span class=p>:</span><span class=o>=</span> <span class=n>tdi</span><span class=p>;</span>
+		<span class=p>}</span>
+	<span class=p>}</span>
+	<span class=n>any</span> <span class=p>{</span>
+		<span class=n>ir</span> <span class=o>==</span> <span class=nl>DTMCS</span><span class=p>:</span> <span class=n>tdo</span> <span class=o>=</span> <span class=n>dtmcs</span><span class=p>[</span><span class=mi>0</span><span class=p>];</span>
+		<span class=n>ir</span> <span class=o>==</span> <span class=nl>DMI</span><span class=p>:</span> <span class=n>tdo</span> <span class=o>=</span> <span class=n>dmi</span><span class=p>[</span><span class=mi>0</span><span class=p>];</span>
+		<span class=n>ir</span> <span class=o>==</span> <span class=nl>BYPASS</span><span class=p>:</span> <span class=n>tdo</span> <span class=o>=</span> <span class=n>bypass</span><span class=p>;</span>
+		<span class=n>ir</span> <span class=o>==</span> <span class=nl>IDCODE</span><span class=p>:</span> <span class=n>tdo</span> <span class=o>=</span> <span class=n>idcode</span><span class=p>[</span><span class=mi>0</span><span class=p>];</span>
+		<span class=k>else</span><span class=o>:</span> <span class=n>tdo</span> <span class=o>=</span> <span class=n>bypass</span><span class=p>;</span>
+	<span class=p>}</span>
+
+<span class=cp>#ifdef DEBUG
+</span><span class=cp></span>	<span class=n>debug_out</span> <span class=o>=</span> <span class=n>dtmcs</span><span class=p>;</span>
+<span class=cp>#endif
+</span><span class=cp></span><span class=p>}</span>
+</code></pre></div><p><code>src/dm.h</code></p><div class=highlight><pre class=chroma><code class=language-C data-lang=C><span class=cp>#ifndef DM_H
+</span><span class=cp>#define DM_H
+</span><span class=cp></span><span class=cm>/* Runs in same clock domain as DTM and output to hart must be 
+</span><span class=cm>	synchronized to hart&#39;s clock domain */</span>
+<span class=n>declare</span> <span class=n>dm</span> <span class=n>interface</span> <span class=p>{</span>
+	<span class=n>input</span> <span class=n>p_reset</span><span class=p>;</span>
+	<span class=n>input</span> <span class=n>m_clock</span><span class=p>;</span>
+	<span class=cm>/* DMI */</span>
+	<span class=n>input</span> <span class=n>addr</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+	<span class=n>input</span> <span class=n>wdata</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+	<span class=n>output</span> <span class=n>rdata</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+	<span class=n>func_in</span> <span class=nf>read</span><span class=p>(</span><span class=n>addr</span><span class=p>);</span>
+	<span class=n>func_in</span> <span class=nf>write</span><span class=p>(</span><span class=n>addr</span><span class=p>,</span> <span class=n>wdata</span><span class=p>);</span>
+	<span class=n>func_out</span> <span class=nf>ready</span><span class=p>();</span>
+<span class=cp>#ifdef DEBUG
+</span><span class=cp></span>	<span class=n>output</span> <span class=n>debug_out</span><span class=p>[</span><span class=mi>32</span><span class=p>];</span>
+<span class=cp>#endif
+</span><span class=cp></span><span class=p>}</span>
+<span class=cp>#endif
+</span></code></pre></div><p><code>src/dm.nsl</code></p><div class=highlight><pre class=chroma><code class=language-C data-lang=C><span class=cp>#include</span> <span class=cpf>&#34;dm.h&#34;</span><span class=cp>
+</span><span class=cp></span><span class=n>module</span> <span class=n>dm</span> <span class=p>{</span>
+	<span class=n>reg</span> <span class=n>dmcontrol</span><span class=p>[</span><span class=mi>32</span><span class=p>]</span> <span class=o>=</span> <span class=mi>0</span><span class=p>;</span>
+	<span class=n>func</span> <span class=n>write</span> <span class=p>{</span>
+		<span class=n>any</span> <span class=p>{</span>
+			<span class=n>addr</span> <span class=o>==</span> <span class=mh>0x10</span><span class=o>:</span> <span class=nl>dmcontrol</span> <span class=p>:</span><span class=o>=</span> <span class=n>wdata</span><span class=p>;</span>
+		<span class=p>}</span>
+		<span class=n>ready</span><span class=p>();</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>read</span> <span class=p>{</span>
+		<span class=n>any</span> <span class=p>{</span>
+			<span class=n>addr</span> <span class=o>==</span> <span class=mh>0x10</span><span class=o>:</span> <span class=n>rdata</span> <span class=o>=</span> <span class=n>dmcontrol</span><span class=p>;</span>
+		<span class=p>}</span>
+		<span class=n>ready</span><span class=p>();</span>
+	<span class=p>}</span>
+
+<span class=cp>#ifdef DEBUG
+</span><span class=cp></span>	<span class=n>debug_out</span> <span class=o>=</span> <span class=n>dmcontrol</span><span class=p>;</span>
+<span class=cp>#endif
+</span><span class=cp></span><span class=p>}</span>
+</code></pre></div><div class=highlight><pre class=chroma><code class=language-C data-lang=C><span class=cp>#include</span> <span class=cpf>&#34;vjtag.h&#34;</span><span class=cp>
+</span><span class=cp>#include</span> <span class=cpf>&#34;dtm.h&#34;</span><span class=cp>
+</span><span class=cp>#include</span> <span class=cpf>&#34;dm.h&#34;</span><span class=cp>
+</span><span class=cp></span>
+<span class=n>declare</span> <span class=n>DE10</span> <span class=p>{</span>
+	<span class=n>input</span> <span class=n>SW</span><span class=p>[</span><span class=mi>10</span><span class=p>];</span>
+	<span class=n>output</span> <span class=n>LEDR</span><span class=p>[</span><span class=mi>10</span><span class=p>];</span>
+<span class=p>}</span>
+<span class=n>module</span> <span class=n>DE10</span> <span class=p>{</span>
+	<span class=n>vjtag</span> <span class=n>vjtag0</span><span class=p>;</span>
+	<span class=n>dtm</span> <span class=n>riscv_dtm</span><span class=p>;</span>
+	<span class=n>dm</span> <span class=n>riscv_dm</span><span class=p>;</span>
+
+	<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>m_clock</span> <span class=o>=</span> <span class=n>vjtag0</span><span class=p>.</span><span class=n>tck</span><span class=p>;</span>
+	<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>p_reset</span> <span class=o>=</span> <span class=n>p_reset</span><span class=p>;</span>
+	<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>ir_in</span> <span class=o>=</span> <span class=n>vjtag0</span><span class=p>.</span><span class=n>ir_in</span><span class=p>;</span>
+	<span class=n>vjtag0</span><span class=p>.</span><span class=n>ir_out</span> <span class=o>=</span> <span class=n>riscv_dtm</span><span class=p>.</span><span class=n>ir_out</span><span class=p>;</span>
+	<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>tdi</span> <span class=o>=</span> <span class=n>vjtag0</span><span class=p>.</span><span class=n>tdi</span><span class=p>;</span>
+	<span class=n>vjtag0</span><span class=p>.</span><span class=n>tdo</span> <span class=o>=</span> <span class=n>riscv_dtm</span><span class=p>.</span><span class=n>tdo</span><span class=p>;</span>
+
+	<span class=n>riscv_dm</span><span class=p>.</span><span class=n>m_clock</span> <span class=o>=</span> <span class=n>vjtag0</span><span class=p>.</span><span class=n>tck</span><span class=p>;</span>
+	<span class=n>riscv_dm</span><span class=p>.</span><span class=n>p_reset</span> <span class=o>=</span> <span class=n>p_reset</span><span class=p>;</span>
+
+	<span class=n>func</span> <span class=n>vjtag0</span><span class=p>.</span><span class=n>virtual_state_cdr</span> <span class=p>{</span>
+		<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>virtual_state_cdr</span><span class=p>();</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>vjtag0</span><span class=p>.</span><span class=n>virtual_state_sdr</span> <span class=p>{</span>
+		<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>virtual_state_sdr</span><span class=p>();</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>vjtag0</span><span class=p>.</span><span class=n>virtual_state_udr</span> <span class=p>{</span>
+		<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>virtual_state_udr</span><span class=p>();</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>vjtag0</span><span class=p>.</span><span class=n>virtual_state_cir</span> <span class=p>{</span>
+		<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>virtual_state_cir</span><span class=p>();</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>vjtag0</span><span class=p>.</span><span class=n>virtual_state_uir</span> <span class=p>{</span>
+		<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>virtual_state_uir</span><span class=p>();</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>riscv_dtm</span><span class=p>.</span><span class=n>read</span> <span class=p>{</span>
+		<span class=n>riscv_dm</span><span class=p>.</span><span class=n>read</span><span class=p>(</span><span class=n>riscv_dtm</span><span class=p>.</span><span class=n>addr</span><span class=p>);</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>riscv_dtm</span><span class=p>.</span><span class=n>write</span> <span class=p>{</span>
+		<span class=n>riscv_dm</span><span class=p>.</span><span class=n>write</span><span class=p>(</span><span class=n>riscv_dtm</span><span class=p>.</span><span class=n>addr</span><span class=p>,</span> <span class=n>riscv_dtm</span><span class=p>.</span><span class=n>wdata</span><span class=p>);</span>
+	<span class=p>}</span>
+	<span class=n>func</span> <span class=n>riscv_dm</span><span class=p>.</span><span class=n>ready</span> <span class=p>{</span>
+		<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>rdata</span> <span class=o>=</span> <span class=n>riscv_dm</span><span class=p>.</span><span class=n>rdata</span><span class=p>;</span>
+		<span class=n>riscv_dtm</span><span class=p>.</span><span class=n>ready</span><span class=p>();</span>
+	<span class=p>}</span>
+
+<span class=cp>#ifdef DEBUG
+</span><span class=cp></span>	<span class=n>any</span> <span class=p>{</span>
+		<span class=n>SW</span> <span class=o>==</span> <span class=mi>0</span><span class=o>:</span> <span class=n>LEDR</span> <span class=o>=</span> <span class=n>riscv_dtm</span><span class=p>.</span><span class=n>debug_out</span><span class=p>;</span>
+		<span class=n>SW</span> <span class=o>==</span> <span class=mi>1</span><span class=o>:</span> <span class=n>LEDR</span> <span class=o>=</span> <span class=n>riscv_dm</span><span class=p>.</span><span class=n>debug_out</span><span class=p>;</span>
+		<span class=k>else</span><span class=o>:</span>	<span class=n>LEDR</span> <span class=o>=</span> <span class=mh>0xffffffff</span><span class=p>;</span>
+	<span class=p>}</span>
+<span class=cp>#endif
+</span><span class=cp></span><span class=p>}</span>
+
+</code></pre></div><h3 id=動作確認>動作確認</h3><p><a href=https://github.com/koyamanX/riscv-debug target=_blank rel="noopener noreferrer">koyamanX/riscv-openocd</a></p><h4 id=ツールのビルド>ツールのビルド</h4><div class=highlight><pre class=chroma><code class=language-bash data-lang=bash>sudo apt install libftdi1-dev
+git clone --recursive https://github.com/koyamanX/riscv-debug <span class=c1>#riscv-vjtag branch(by default)</span>
+<span class=nb>cd</span> riscv-debug/riscv-openocd
+git submodule update --init --recursive
+./bootstrap
+mkdir build
+<span class=nb>cd</span> build
+../configure --prefix<span class=o>=</span>/opt/riscv-openocd
+make -j <span class=k>$(</span>nproc<span class=k>)</span>
+sudo make install
+</code></pre></div><p><code>rv32xsoc.cfg</code></p><pre><code>set _ENDIAN little
+set _CHIPNAME riscv
+set _FPGATAPID 0x031050dd
+set _TARGETNAME $_CHIPNAME.cpu
+
+adapter driver usb_blaster
+usb_blaster_lowlevel_driver ftdi
+
+jtag newtap $_CHIPNAME cpu -irlen 10 -expected-id $_FPGATAPID
+target create $_TARGETNAME riscv -endian $_ENDIAN -chain-position $_TARGETNAME
+
+#use_vjtag
+</code></pre><h4 id=fpgade10-liteへ実装>FPGA(DE10-Lite)へ実装</h4><div class=highlight><pre class=chroma><code class=language-bash data-lang=bash><span class=nb>cd</span> riscv-debug/fpga
+make all
+make download
+</code></pre></div><h4 id=テスト>テスト</h4><div class=highlight><pre class=chroma><code class=language-bash data-lang=bash>sudo /opt/riscv-openocd/bin/openocd -f ../tcl/target/rv32xsoc.cfg
+</code></pre></div><h4 id=実行結果>実行結果</h4><p>dmactiveに成功している。(dmcontrolの0ビット目)
+dmstatusのリードに失敗しているが、実装していないので期待通り。
+<span class=image-container><span class=link><a href=./image04.png target=_blank><img class=img src=./image04.png></a></span></span></p><p>次からは、DMの仕様読みと実装を行う。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/jtag/>JTAG</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/fpga/>FPGA</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part4/><span class="iconfont icon-article"></span>My RISC-V debug feature part4</a></p><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part2/><span class="iconfont icon-article"></span>My RISC-V debug feature part2</a></p></section><section class="article discussion"><div id=disqus_thread></div><script type=application/javascript>var disqus_config=function(){};(function(){if(["localhost","127.0.0.1"].indexOf(window.location.hostname)!=-1){document.getElementById('disqus_thread').innerHTML='Disqus comments not available by default when the website is previewed locally.';return}var b=document,a=b.createElement('script');a.async=!0,a.src='//https-koyamanx-github-io-ck-dev.disqus.com/embed.js',a.setAttribute('data-timestamp',+new Date),(b.head||b.body).appendChild(a)})()</script><noscript>Please enable JavaScript to view the <a href=https://disqus.com/?ref_noscript>comments powered by Disqus.</a></noscript><a href=https://disqus.com class=dsq-brlink>comments powered by <span class=logo-disqus>Disqus</span></a></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>

@@ -1,0 +1,478 @@
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>My RISC-V debug feature part5&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="My RISC-V debug feature part5"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">My RISC-V debug feature part5</h1><p class="article date">Monday, May 10, 2021</p></section><article class="article markdown-body"><p>仕様を読んでいるが、よくわからない。
+hartselとかwindowみたいなのがあってよく分かりづらい。
+最小限の機能で、OpenOCDから制御できればいいので、
+OpenOCDの初期化フローを読んで、それに応答するようなDM(Debug Module)を作ってみる。</p><h2 id=openocdの初期化>OpenOCDの初期化</h2><p><code>src/openocd.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/* normally this is the main() function entry, but if OpenOCD is linked
+</span><span class=cm> * into application, then this fn will not be invoked, but rather that
+</span><span class=cm> * application will have it&#39;s own implementation of main(). */</span>
+<span class=kt>int</span> <span class=nf>openocd_main</span><span class=p>(</span><span class=kt>int</span> <span class=n>argc</span><span class=p>,</span> <span class=kt>char</span> <span class=o>*</span><span class=n>argv</span><span class=p>[])</span>
+<span class=p>{</span>
+	<span class=kt>int</span> <span class=n>ret</span><span class=p>;</span>
+
+	<span class=cm>/* initialize commandline interface */</span>
+	<span class=k>struct</span> <span class=n>command_context</span> <span class=o>*</span><span class=n>cmd_ctx</span><span class=p>;</span>
+
+	<span class=n>cmd_ctx</span> <span class=o>=</span> <span class=n>setup_command_handler</span><span class=p>(</span><span class=nb>NULL</span><span class=p>);</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>util_init</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>)</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>EXIT_FAILURE</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>ioutil_init</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>)</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>EXIT_FAILURE</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>rtt_init</span><span class=p>()</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>EXIT_FAILURE</span><span class=p>;</span>
+
+	<span class=n>LOG_OUTPUT</span><span class=p>(</span><span class=s>&#34;For bug reports, read</span><span class=se>\n\t</span><span class=s>&#34;</span>
+		<span class=s>&#34;http://openocd.org/doc/doxygen/bugs.html&#34;</span>
+		<span class=s>&#34;</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>);</span>
+
+	<span class=n>command_context_mode</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>,</span> <span class=n>COMMAND_CONFIG</span><span class=p>);</span>
+	<span class=n>command_set_output_handler</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>,</span> <span class=n>configuration_output_handler</span><span class=p>,</span> <span class=nb>NULL</span><span class=p>);</span>
+
+	<span class=n>server_host_os_entry</span><span class=p>();</span>
+
+	<span class=cm>/* Start the executable meat that can evolve into thread in future. */</span>
+	<span class=n>ret</span> <span class=o>=</span> <span class=n>openocd_thread</span><span class=p>(</span><span class=n>argc</span><span class=p>,</span> <span class=n>argv</span><span class=p>,</span> <span class=n>cmd_ctx</span><span class=p>);</span>
+
+	<span class=n>flash_free_all_banks</span><span class=p>();</span>
+	<span class=n>gdb_service_free</span><span class=p>();</span>
+	<span class=n>server_free</span><span class=p>();</span>
+
+	<span class=n>unregister_all_commands</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>,</span> <span class=nb>NULL</span><span class=p>);</span>
+
+	<span class=cm>/* free all DAP and CTI objects */</span>
+	<span class=n>dap_cleanup_all</span><span class=p>();</span>
+	<span class=n>arm_cti_cleanup_all</span><span class=p>();</span>
+
+	<span class=n>adapter_quit</span><span class=p>();</span>
+
+	<span class=n>server_host_os_close</span><span class=p>();</span>
+
+	<span class=cm>/* Shutdown commandline interface */</span>
+	<span class=n>command_exit</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>);</span>
+
+	<span class=n>rtt_exit</span><span class=p>();</span>
+	<span class=n>free_config</span><span class=p>();</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>ERROR_FAIL</span> <span class=o>==</span> <span class=n>ret</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>EXIT_FAILURE</span><span class=p>;</span>
+	<span class=k>else</span> <span class=k>if</span> <span class=p>(</span><span class=n>ERROR_OK</span> <span class=o>!=</span> <span class=n>ret</span><span class=p>)</span>
+		<span class=n>exit_on_signal</span><span class=p>(</span><span class=n>ret</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=n>ret</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/** OpenOCD runtime meat that can become single-thread in future. It parse
+</span><span class=cm> * commandline, reads configuration, sets up the target and starts server loop.
+</span><span class=cm> * Commandline arguments are passed into this function from openocd_main().
+</span><span class=cm> */</span>
+<span class=k>static</span> <span class=kt>int</span> <span class=nf>openocd_thread</span><span class=p>(</span><span class=kt>int</span> <span class=n>argc</span><span class=p>,</span> <span class=kt>char</span> <span class=o>*</span><span class=n>argv</span><span class=p>[],</span> <span class=k>struct</span> <span class=n>command_context</span> <span class=o>*</span><span class=n>cmd_ctx</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=kt>int</span> <span class=n>ret</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>parse_cmdline_args</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>,</span> <span class=n>argc</span><span class=p>,</span> <span class=n>argv</span><span class=p>)</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>server_preinit</span><span class=p>()</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=n>ret</span> <span class=o>=</span> <span class=n>parse_config_file</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>ret</span> <span class=o>==</span> <span class=n>ERROR_COMMAND_CLOSE_CONNECTION</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>server_quit</span><span class=p>();</span> <span class=cm>/* gdb server may be initialized by -c init */</span>
+		<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+	<span class=p>}</span> <span class=k>else</span> <span class=k>if</span> <span class=p>(</span><span class=n>ret</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>server_quit</span><span class=p>();</span> <span class=cm>/* gdb server may be initialized by -c init */</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=n>ret</span> <span class=o>=</span> <span class=n>server_init</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>ERROR_OK</span> <span class=o>!=</span> <span class=n>ret</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>init_at_startup</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>ret</span> <span class=o>=</span> <span class=n>command_run_line</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>,</span> <span class=s>&#34;init&#34;</span><span class=p>);</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>ERROR_OK</span> <span class=o>!=</span> <span class=n>ret</span><span class=p>)</span> <span class=p>{</span>
+			<span class=n>server_quit</span><span class=p>();</span>
+			<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+		<span class=p>}</span>
+	<span class=p>}</span>
+
+	<span class=n>ret</span> <span class=o>=</span> <span class=n>server_loop</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>);</span>
+
+	<span class=kt>int</span> <span class=n>last_signal</span> <span class=o>=</span> <span class=n>server_quit</span><span class=p>();</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>last_signal</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>last_signal</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>ret</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+	<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><p><code>openocd_thread</code>がメインになる様子。
+まず、command line argumentsをパースする。
+その後、コンフィグファイルをパースする。
+このコンフィグファイルは<code>-f</code>オプションで渡されるものであり、コマンドを一行ずつ実行していく。</p><h2 id=コンフィグファイルのパースおよび実行>コンフィグファイルのパースおよび実行</h2><p><code>src/helper/configuration.c</code></p><pre><code>int parse_config_file(struct command_context *cmd_ctx)
+{
+	int retval;
+	char **cfg;
+
+	if (!config_file_names) {
+		command_run_line(cmd_ctx, &quot;script openocd.cfg&quot;);
+		return ERROR_OK;
+	}
+
+	cfg = config_file_names;
+
+	while (*cfg) {
+		retval = command_run_line(cmd_ctx, *cfg);
+		if (retval != ERROR_OK)
+			return retval;
+		cfg++;
+	}
+
+	return ERROR_OK;
+}
+</code></pre><p><code>tcl/target/rv32xsoc.cfg</code>の抜粋。</p><div class=highlight><pre class=chroma><code class=language-bash data-lang=bash>...
+jtag newtap <span class=nv>$_CHIPNAME</span> cpu -irlen <span class=m>10</span> -expected-id <span class=nv>$_FPGATAPID</span>
+target create <span class=nv>$_TARGETNAME</span> riscv -endian <span class=nv>$_ENDIAN</span> -chain-position <span class=nv>$_TARGETNAME</span>
+</code></pre></div><p><code>parse_config_file</code>によりパースされ、一行ずつ実行する。
+ここでは、<code>target_create</code>にフォーカスしてみていく。
+<code>target create</code>のハンドラは以下のようになっている。</p><p><code>src/target/target.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=k>const</span> <span class=k>struct</span> <span class=n>command_registration</span> <span class=n>target_command_handlers</span><span class=p>[]</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;targets&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>handler</span> <span class=o>=</span> <span class=n>handle_targets_command</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_ANY</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;change current default target (one parameter) &#34;</span>
+			<span class=s>&#34;or prints table of all targets (no parameters)&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;[target]&#34;</span><span class=p>,</span>
+	<span class=p>},</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;target&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_CONFIG</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;configure target&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>chain</span> <span class=o>=</span> <span class=n>target_subcommand_handlers</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;&#34;</span><span class=p>,</span>
+	<span class=p>},</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;enable_rtos_riscv&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>handler</span> <span class=o>=</span> <span class=n>handle_enable_rtos_riscv_command</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_CONFIG</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;enable_rtos_riscv&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;Allow the use of `-rtos riscv` for just a little longer, &#34;</span>
+			<span class=s>&#34;until it will be completely removed at the end of 2020.&#34;</span>
+	<span class=p>},</span>
+	<span class=n>COMMAND_REGISTRATION_DONE</span>
+<span class=p>};</span>
+</code></pre></div><p>つまり、<code>target</code>命令の場合は次にくる引数がサブコマンドになる。
+サブコマンドは以下の通り。</p><p><code>src/target/target.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=k>const</span> <span class=k>struct</span> <span class=n>command_registration</span> <span class=n>target_subcommand_handlers</span><span class=p>[]</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;init&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_CONFIG</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>handler</span> <span class=o>=</span> <span class=n>handle_target_init_command</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;initialize targets&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;&#34;</span><span class=p>,</span>
+	<span class=p>},</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;create&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_CONFIG</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>jim_handler</span> <span class=o>=</span> <span class=n>jim_target_create</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;name type &#39;-chain-position&#39; name [options ...]&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;Creates and selects a new target&#34;</span><span class=p>,</span>
+	<span class=p>},</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;current&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_ANY</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>jim_handler</span> <span class=o>=</span> <span class=n>jim_target_current</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;Returns the currently selected target&#34;</span><span class=p>,</span>
+	<span class=p>},</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;types&#34;</span><span class=p>,</span> <span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_ANY</span><span class=p>,</span> <span class=p>.</span><span class=n>jim_handler</span> <span class=o>=</span> <span class=n>jim_target_types</span><span class=p>,</span> <span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;Returns the available target types as &#34;</span> <span class=s>&#34;a list of strings&#34;</span><span class=p>,</span> <span class=p>},</span> <span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;names&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_ANY</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>jim_handler</span> <span class=o>=</span> <span class=n>jim_target_names</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;Returns the names of all targets as a list of strings&#34;</span><span class=p>,</span>
+	<span class=p>},</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;smp&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_ANY</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>jim_handler</span> <span class=o>=</span> <span class=n>jim_target_smp</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;targetname1 targetname2 ...&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;gather several target in a smp list&#34;</span>
+	<span class=p>},</span>
+
+	<span class=n>COMMAND_REGISTRATION_DONE</span>
+<span class=p>};</span>
+</code></pre></div><p>今回は<code>target create</code>なので、<code>jim_target_create</code>関数が呼ばれることになる。
+この関数では、命令の引数を準備し、<code>target_create</code>を呼び出す。
+<code>src/target/target.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kt>int</span> <span class=nf>jim_target_create</span><span class=p>(</span><span class=n>Jim_Interp</span> <span class=o>*</span><span class=n>interp</span><span class=p>,</span> <span class=kt>int</span> <span class=n>argc</span><span class=p>,</span> <span class=n>Jim_Obj</span> <span class=o>*</span><span class=k>const</span> <span class=o>*</span><span class=n>argv</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>Jim_GetOptInfo</span> <span class=n>goi</span><span class=p>;</span>
+	<span class=n>Jim_GetOpt_Setup</span><span class=p>(</span><span class=o>&amp;</span><span class=n>goi</span><span class=p>,</span> <span class=n>interp</span><span class=p>,</span> <span class=n>argc</span> <span class=o>-</span> <span class=mi>1</span><span class=p>,</span> <span class=n>argv</span> <span class=o>+</span> <span class=mi>1</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>goi</span><span class=p>.</span><span class=n>argc</span> <span class=o>&lt;</span> <span class=mi>3</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>Jim_WrongNumArgs</span><span class=p>(</span><span class=n>goi</span><span class=p>.</span><span class=n>interp</span><span class=p>,</span> <span class=n>goi</span><span class=p>.</span><span class=n>argc</span><span class=p>,</span> <span class=n>goi</span><span class=p>.</span><span class=n>argv</span><span class=p>,</span>
+			<span class=s>&#34;&lt;name&gt; &lt;target_type&gt; [&lt;target_options&gt; ...]&#34;</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>JIM_ERR</span><span class=p>;</span>
+	<span class=p>}</span>
+	<span class=k>return</span> <span class=n>target_create</span><span class=p>(</span><span class=o>&amp;</span><span class=n>goi</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p><code>target create</code>の引数を処理する。
+<code>src/target/target.c:create_target</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kt>int</span> <span class=nf>target_create</span><span class=p>(</span><span class=n>Jim_GetOptInfo</span> <span class=o>*</span><span class=n>goi</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>Jim_Obj</span> <span class=o>*</span><span class=n>new_cmd</span><span class=p>;</span>
+	<span class=n>Jim_Cmd</span> <span class=o>*</span><span class=n>cmd</span><span class=p>;</span>
+	<span class=k>const</span> <span class=kt>char</span> <span class=o>*</span><span class=n>cp</span><span class=p>;</span>
+	<span class=kt>int</span> <span class=n>e</span><span class=p>;</span>
+	<span class=kt>int</span> <span class=n>x</span><span class=p>;</span>
+	<span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>;</span>
+	<span class=k>struct</span> <span class=n>command_context</span> <span class=o>*</span><span class=n>cmd_ctx</span><span class=p>;</span>
+
+	<span class=n>cmd_ctx</span> <span class=o>=</span> <span class=n>current_command_context</span><span class=p>(</span><span class=n>goi</span><span class=o>-&gt;</span><span class=n>interp</span><span class=p>);</span>
+	<span class=n>assert</span><span class=p>(</span><span class=n>cmd_ctx</span> <span class=o>!=</span> <span class=nb>NULL</span><span class=p>);</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>goi</span><span class=o>-&gt;</span><span class=n>argc</span> <span class=o>&lt;</span> <span class=mi>3</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>Jim_WrongNumArgs</span><span class=p>(</span><span class=n>goi</span><span class=o>-&gt;</span><span class=n>interp</span><span class=p>,</span> <span class=mi>1</span><span class=p>,</span> <span class=n>goi</span><span class=o>-&gt;</span><span class=n>argv</span><span class=p>,</span> <span class=s>&#34;?name? ?type? ..options...&#34;</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>JIM_ERR</span><span class=p>;</span>
+	<span class=p>}</span>
+
+<span class=p>...</span>
+</code></pre></div><p><code>src/target/target.c:create_target</code>続き</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=cm>/* now does target type exist */</span>
+	<span class=k>for</span> <span class=p>(</span><span class=n>x</span> <span class=o>=</span> <span class=mi>0</span> <span class=p>;</span> <span class=n>target_types</span><span class=p>[</span><span class=n>x</span><span class=p>]</span> <span class=p>;</span> <span class=n>x</span><span class=o>++</span><span class=p>)</span> <span class=p>{</span>
+		<span class=k>if</span> <span class=p>(</span><span class=mi>0</span> <span class=o>==</span> <span class=n>strcmp</span><span class=p>(</span><span class=n>cp</span><span class=p>,</span> <span class=n>target_types</span><span class=p>[</span><span class=n>x</span><span class=p>]</span><span class=o>-&gt;</span><span class=n>name</span><span class=p>))</span> <span class=p>{</span>
+			<span class=cm>/* found */</span>
+			<span class=k>break</span><span class=p>;</span>
+		<span class=p>}</span>
+
+		<span class=cm>/* check for deprecated name */</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>target_types</span><span class=p>[</span><span class=n>x</span><span class=p>]</span><span class=o>-&gt;</span><span class=n>deprecated_name</span><span class=p>)</span> <span class=p>{</span>
+			<span class=k>if</span> <span class=p>(</span><span class=mi>0</span> <span class=o>==</span> <span class=n>strcmp</span><span class=p>(</span><span class=n>cp</span><span class=p>,</span> <span class=n>target_types</span><span class=p>[</span><span class=n>x</span><span class=p>]</span><span class=o>-&gt;</span><span class=n>deprecated_name</span><span class=p>))</span> <span class=p>{</span>
+				<span class=cm>/* found */</span>
+				<span class=n>LOG_WARNING</span><span class=p>(</span><span class=s>&#34;target name is deprecated use: </span><span class=se>\&#39;</span><span class=s>%s</span><span class=se>\&#39;</span><span class=s>&#34;</span><span class=p>,</span> <span class=n>target_types</span><span class=p>[</span><span class=n>x</span><span class=p>]</span><span class=o>-&gt;</span><span class=n>name</span><span class=p>);</span>
+				<span class=k>break</span><span class=p>;</span>
+			<span class=p>}</span>
+		<span class=p>}</span>
+	<span class=p>}</span>
+</code></pre></div><p>この部分で、以下のtclのriscvを処理している。
+<code>target create $_TARGETNAME riscv -endian $_ENDIAN -chain-position $_TARGETNAME</code>
+<code>target_types[]</code>から<code>riscv</code>に対応する、ターゲットを探し出す。</p><p><code>src/target/target.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=k>struct</span> <span class=n>target_type</span> <span class=o>*</span><span class=n>target_types</span><span class=p>[]</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=o>&amp;</span><span class=n>arm7tdmi_target</span><span class=p>,</span>
+	<span class=o>&amp;</span><span class=n>arm9tdmi_target</span><span class=p>,</span>
+	<span class=o>&amp;</span><span class=n>arm920t_target</span><span class=p>,</span>
+	<span class=o>&amp;</span><span class=n>arm720t_target</span><span class=p>,</span>
+	<span class=p>...</span>
+	<span class=o>&amp;</span><span class=n>riscv_target</span><span class=p>,</span>
+	<span class=p>...</span>	
+</code></pre></div><p><code>src/target/target.c:target_create</code>続き</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=cm>/* Create it */</span>
+	<span class=n>target</span> <span class=o>=</span> <span class=n>calloc</span><span class=p>(</span><span class=mi>1</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=k>struct</span> <span class=n>target</span><span class=p>));</span>
+	<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>target</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;Out of memory&#34;</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>JIM_ERR</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=cm>/* set target number */</span>
+	<span class=n>target</span><span class=o>-&gt;</span><span class=n>target_number</span> <span class=o>=</span> <span class=n>new_target_number</span><span class=p>();</span>
+
+	<span class=cm>/* allocate memory for each unique target type */</span>
+	<span class=n>target</span><span class=o>-&gt;</span><span class=n>type</span> <span class=o>=</span> <span class=n>malloc</span><span class=p>(</span><span class=k>sizeof</span><span class=p>(</span><span class=k>struct</span> <span class=n>target_type</span><span class=p>));</span>
+	<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>type</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;Out of memory&#34;</span><span class=p>);</span>
+		<span class=n>free</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+		<span class=k>return</span> <span class=n>JIM_ERR</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=n>memcpy</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>type</span><span class=p>,</span> <span class=n>target_types</span><span class=p>[</span><span class=n>x</span><span class=p>],</span> <span class=k>sizeof</span><span class=p>(</span><span class=k>struct</span> <span class=n>target_type</span><span class=p>));</span>
+</code></pre></div><p><code>target_configure</code>関数で<code>-endian</code>や<code>-chain-position</code>を処理をする。</p><p><code>src/target/target.c:target_create</code>続き</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=n>e</span> <span class=o>=</span> <span class=n>target_configure</span><span class=p>(</span><span class=n>goi</span><span class=p>,</span> <span class=n>target</span><span class=p>);</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>e</span> <span class=o>==</span> <span class=n>JIM_OK</span><span class=p>)</span> <span class=p>{</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>has_dap</span><span class=p>)</span> <span class=p>{</span>
+			<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>dap_configured</span><span class=p>)</span> <span class=p>{</span>
+				<span class=n>Jim_SetResultString</span><span class=p>(</span><span class=n>goi</span><span class=o>-&gt;</span><span class=n>interp</span><span class=p>,</span> <span class=s>&#34;-dap ?name? required when creating target&#34;</span><span class=p>,</span> <span class=o>-</span><span class=mi>1</span><span class=p>);</span>
+				<span class=n>e</span> <span class=o>=</span> <span class=n>JIM_ERR</span><span class=p>;</span>
+			<span class=p>}</span>
+		<span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+			<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap_configured</span><span class=p>)</span> <span class=p>{</span>
+				<span class=n>Jim_SetResultString</span><span class=p>(</span><span class=n>goi</span><span class=o>-&gt;</span><span class=n>interp</span><span class=p>,</span> <span class=s>&#34;-chain-position ?name? required when creating target&#34;</span><span class=p>,</span> <span class=o>-</span><span class=mi>1</span><span class=p>);</span>
+				<span class=n>e</span> <span class=o>=</span> <span class=n>JIM_ERR</span><span class=p>;</span>
+			<span class=p>}</span>
+		<span class=p>}</span>
+		<span class=cm>/* tap must be set after target was configured */</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>tap</span> <span class=o>==</span> <span class=nb>NULL</span><span class=p>)</span>
+			<span class=n>e</span> <span class=o>=</span> <span class=n>JIM_ERR</span><span class=p>;</span>
+	<span class=p>}</span>
+</code></pre></div><p>また、この時点では(<code>target_create</code>)、TAPが設定されていることが期待されている(<code>-chain-position</code>で指定)。上のコードで確認している。</p><p><code>src/target/target.c:target_create</code>続き</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=k>if</span> <span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>type</span><span class=o>-&gt;</span><span class=n>target_create</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>e</span> <span class=o>=</span> <span class=p>(</span><span class=o>*</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>type</span><span class=o>-&gt;</span><span class=n>target_create</span><span class=p>))(</span><span class=n>target</span><span class=p>,</span> <span class=n>goi</span><span class=o>-&gt;</span><span class=n>interp</span><span class=p>);</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>e</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span> <span class=p>{</span>
+			<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;target_create failed&#34;</span><span class=p>);</span>
+			<span class=n>free</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>cmd_name</span><span class=p>);</span>
+			<span class=n>rtos_destroy</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+			<span class=n>free</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>gdb_port_override</span><span class=p>);</span>
+			<span class=n>free</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>trace_info</span><span class=p>);</span>
+			<span class=n>free</span><span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>type</span><span class=p>);</span>
+			<span class=n>free</span><span class=p>(</span><span class=n>target</span><span class=p>);</span>
+			<span class=k>return</span> <span class=n>JIM_ERR</span><span class=p>;</span>
+		<span class=p>}</span>
+	<span class=p>}</span>
+
+	<span class=cm>/* create the target specific commands */</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>type</span><span class=o>-&gt;</span><span class=n>commands</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>e</span> <span class=o>=</span> <span class=n>register_commands</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>,</span> <span class=nb>NULL</span><span class=p>,</span> <span class=n>target</span><span class=o>-&gt;</span><span class=n>type</span><span class=o>-&gt;</span><span class=n>commands</span><span class=p>);</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>ERROR_OK</span> <span class=o>!=</span> <span class=n>e</span><span class=p>)</span>
+			<span class=n>LOG_ERROR</span><span class=p>(</span><span class=s>&#34;unable to register &#39;%s&#39; commands&#34;</span><span class=p>,</span> <span class=n>cp</span><span class=p>);</span>
+	<span class=p>}</span>
+</code></pre></div><p>ここで、ターゲット(riscv)の<code>target_create</code>を呼び出す。
+その後、ターゲットspecificなコマンドを登録する。</p><p>riscv用の<code>target_create</code>を読んで見る。</p><p>以下が<code>target_types</code>から取り出した、ターゲットspecificな構造体の実態である。
+<code>../src/target/riscv/riscv.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>struct</span> <span class=n>target_type</span> <span class=n>riscv_target</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;riscv&#34;</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>target_create</span> <span class=o>=</span> <span class=n>riscv_create_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>init_target</span> <span class=o>=</span> <span class=n>riscv_init_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>deinit_target</span> <span class=o>=</span> <span class=n>riscv_deinit_target</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>examine</span> <span class=o>=</span> <span class=n>riscv_examine</span><span class=p>,</span>
+</code></pre></div><p><code>riscv_create_target</code>が呼び出されることになる。
+<code>../src/target/riscv/riscv.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kt>int</span> <span class=nf>riscv_create_target</span><span class=p>(</span><span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>,</span> <span class=n>Jim_Interp</span> <span class=o>*</span><span class=n>interp</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;riscv_create_target()&#34;</span><span class=p>);</span>
+	<span class=n>target</span><span class=o>-&gt;</span><span class=n>arch_info</span> <span class=o>=</span> <span class=n>calloc</span><span class=p>(</span><span class=mi>1</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=n>riscv_info_t</span><span class=p>));</span>
+	<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>target</span><span class=o>-&gt;</span><span class=n>arch_info</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+	<span class=n>riscv_info_init</span><span class=p>(</span><span class=n>target</span><span class=p>,</span> <span class=n>target</span><span class=o>-&gt;</span><span class=n>arch_info</span><span class=p>);</span>
+	<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><p><code>../src/target/riscv/riscv.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/*** RISC-V Interface ***/</span>
+
+<span class=kt>void</span> <span class=nf>riscv_info_init</span><span class=p>(</span><span class=k>struct</span> <span class=n>target</span> <span class=o>*</span><span class=n>target</span><span class=p>,</span> <span class=n>riscv_info_t</span> <span class=o>*</span><span class=n>r</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>memset</span><span class=p>(</span><span class=n>r</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=o>*</span><span class=n>r</span><span class=p>));</span>
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>dtm_version</span> <span class=o>=</span> <span class=mi>1</span><span class=p>;</span>
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>registers_initialized</span> <span class=o>=</span> <span class=nb>false</span><span class=p>;</span>
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>current_hartid</span> <span class=o>=</span> <span class=n>target</span><span class=o>-&gt;</span><span class=n>coreid</span><span class=p>;</span>
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>version_specific</span> <span class=o>=</span> <span class=nb>NULL</span><span class=p>;</span>
+
+	<span class=n>memset</span><span class=p>(</span><span class=n>r</span><span class=o>-&gt;</span><span class=n>trigger_unique_id</span><span class=p>,</span> <span class=mh>0xff</span><span class=p>,</span> <span class=k>sizeof</span><span class=p>(</span><span class=n>r</span><span class=o>-&gt;</span><span class=n>trigger_unique_id</span><span class=p>));</span>
+
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>xlen</span> <span class=o>=</span> <span class=o>-</span><span class=mi>1</span><span class=p>;</span>
+
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>mem_access_methods</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span> <span class=o>=</span> <span class=n>RISCV_MEM_ACCESS_PROGBUF</span><span class=p>;</span>
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>mem_access_methods</span><span class=p>[</span><span class=mi>1</span><span class=p>]</span> <span class=o>=</span> <span class=n>RISCV_MEM_ACCESS_SYSBUS</span><span class=p>;</span>
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>mem_access_methods</span><span class=p>[</span><span class=mi>2</span><span class=p>]</span> <span class=o>=</span> <span class=n>RISCV_MEM_ACCESS_ABSTRACT</span><span class=p>;</span>
+
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>mem_access_progbuf_warn</span> <span class=o>=</span> <span class=nb>true</span><span class=p>;</span>
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>mem_access_sysbus_warn</span> <span class=o>=</span> <span class=nb>true</span><span class=p>;</span>
+	<span class=n>r</span><span class=o>-&gt;</span><span class=n>mem_access_abstract_warn</span> <span class=o>=</span> <span class=nb>true</span><span class=p>;</span>
+
+	<span class=n>INIT_LIST_HEAD</span><span class=p>(</span><span class=o>&amp;</span><span class=n>r</span><span class=o>-&gt;</span><span class=n>expose_csr</span><span class=p>);</span>
+	<span class=n>INIT_LIST_HEAD</span><span class=p>(</span><span class=o>&amp;</span><span class=n>r</span><span class=o>-&gt;</span><span class=n>expose_custom</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><h2 id=initコマンド>initコマンド</h2><p>ターゲットの作成が終わったら、サーバーを建てる。
+そのあと、<code>init</code>コマンドを実行する。</p><p><code>src/openocd.c:openocd_thread</code>抜粋</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=n>ret</span> <span class=o>=</span> <span class=n>server_init</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>ERROR_OK</span> <span class=o>!=</span> <span class=n>ret</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>init_at_startup</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>ret</span> <span class=o>=</span> <span class=n>command_run_line</span><span class=p>(</span><span class=n>cmd_ctx</span><span class=p>,</span> <span class=s>&#34;init&#34;</span><span class=p>);</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>ERROR_OK</span> <span class=o>!=</span> <span class=n>ret</span><span class=p>)</span> <span class=p>{</span>
+			<span class=n>server_quit</span><span class=p>();</span>
+			<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+		<span class=p>}</span>
+	<span class=p>}</span>
+
+</code></pre></div><p><code>src/openocd.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=k>const</span> <span class=k>struct</span> <span class=n>command_registration</span> <span class=n>openocd_command_handlers</span><span class=p>[]</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;version&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>jim_handler</span> <span class=o>=</span> <span class=n>jim_version_command</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_ANY</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;show program version&#34;</span><span class=p>,</span>
+	<span class=p>},</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;noinit&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>handler</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>handle_noinit_command</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_CONFIG</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;Prevent &#39;init&#39; from being called at startup.&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;&#34;</span>
+	<span class=p>},</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;init&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>handler</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>handle_init_command</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_ANY</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;Initializes configured targets and servers.  &#34;</span>
+			<span class=s>&#34;Changes command mode from CONFIG to EXEC.  &#34;</span>
+			<span class=s>&#34;Unless &#39;noinit&#39; is called, this command is &#34;</span>
+			<span class=s>&#34;called automatically at the end of startup.&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;&#34;</span>
+	<span class=p>},</span>
+	<span class=p>{</span>
+		<span class=p>.</span><span class=n>name</span> <span class=o>=</span> <span class=s>&#34;add_script_search_dir&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>handler</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>handle_add_script_search_dir_command</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>mode</span> <span class=o>=</span> <span class=n>COMMAND_ANY</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>help</span> <span class=o>=</span> <span class=s>&#34;dir to search for config files and scripts&#34;</span><span class=p>,</span>
+		<span class=p>.</span><span class=n>usage</span> <span class=o>=</span> <span class=s>&#34;&lt;directory&gt;&#34;</span>
+	<span class=p>},</span>
+	<span class=n>COMMAND_REGISTRATION_DONE</span>
+<span class=p>};</span>
+</code></pre></div><p><code>init</code>コマンドは<code>handle_init_command</code>が対処する。</p><p><code>src/openocd.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/* OpenOCD can&#39;t really handle failure of this command. Patches welcome! :-) */</span>
+<span class=n>COMMAND_HANDLER</span><span class=p>(</span><span class=n>handle_init_command</span><span class=p>)</span>
+<span class=p>{</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>CMD_ARGC</span> <span class=o>!=</span> <span class=mi>0</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_COMMAND_SYNTAX_ERROR</span><span class=p>;</span>
+
+	<span class=kt>int</span> <span class=n>retval</span><span class=p>;</span>
+	<span class=k>static</span> <span class=kt>int</span> <span class=n>initialized</span><span class=p>;</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>initialized</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+
+	<span class=n>initialized</span> <span class=o>=</span> <span class=mi>1</span><span class=p>;</span>
+
+	<span class=n>retval</span> <span class=o>=</span> <span class=n>command_run_line</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>,</span> <span class=s>&#34;target init&#34;</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>ERROR_OK</span> <span class=o>!=</span> <span class=n>retval</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=n>retval</span> <span class=o>=</span> <span class=n>adapter_init</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>retval</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span> <span class=p>{</span>
+		<span class=cm>/* we must be able to set up the debug adapter */</span>
+		<span class=k>return</span> <span class=n>retval</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;Debug Adapter init complete&#34;</span><span class=p>);</span>
+
+	<span class=cm>/* &#34;transport init&#34; verifies the expected devices are present;
+</span><span class=cm>	 * for JTAG, it checks the list of configured TAPs against
+</span><span class=cm>	 * what&#39;s discoverable, possibly with help from the platform&#39;s
+</span><span class=cm>	 * JTAG event handlers.  (which require COMMAND_EXEC)
+</span><span class=cm>	 */</span>
+	<span class=n>command_context_mode</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>,</span> <span class=n>COMMAND_EXEC</span><span class=p>);</span>
+
+	<span class=n>retval</span> <span class=o>=</span> <span class=n>command_run_line</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>,</span> <span class=s>&#34;transport init&#34;</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>ERROR_OK</span> <span class=o>!=</span> <span class=n>retval</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=n>retval</span> <span class=o>=</span> <span class=n>command_run_line</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>,</span> <span class=s>&#34;dap init&#34;</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>ERROR_OK</span> <span class=o>!=</span> <span class=n>retval</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;Examining targets...&#34;</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>target_examine</span><span class=p>()</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=n>LOG_DEBUG</span><span class=p>(</span><span class=s>&#34;target examination failed&#34;</span><span class=p>);</span>
+
+	<span class=n>command_context_mode</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>,</span> <span class=n>COMMAND_CONFIG</span><span class=p>);</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>command_run_line</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>,</span> <span class=s>&#34;flash init&#34;</span><span class=p>)</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>command_run_line</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>,</span> <span class=s>&#34;nand init&#34;</span><span class=p>)</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>command_run_line</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>,</span> <span class=s>&#34;pld init&#34;</span><span class=p>)</span> <span class=o>!=</span> <span class=n>ERROR_OK</span><span class=p>)</span>
+		<span class=k>return</span> <span class=n>ERROR_FAIL</span><span class=p>;</span>
+	<span class=n>command_context_mode</span><span class=p>(</span><span class=n>CMD_CTX</span><span class=p>,</span> <span class=n>COMMAND_EXEC</span><span class=p>);</span>
+
+	<span class=cm>/* initialize telnet subsystem */</span>
+	<span class=n>gdb_target_add_all</span><span class=p>(</span><span class=n>all_targets</span><span class=p>);</span>
+
+	<span class=n>target_register_event_callback</span><span class=p>(</span><span class=n>log_target_callback_event_handler</span><span class=p>,</span> <span class=n>CMD_CTX</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=n>ERROR_OK</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><p>ここでは、以下の順でコマンドと関数を実行する。</p><ol start=0><li><code>init</code></li><li><code>adapter_init();</code></li><li><code>transport init</code></li><li><code>dap init</code></li><li><code>target_examine();</code></li><li><code>flash init</code></li><li><code>nand init</code></li><li><code>pld init</code></li></ol><p><code>init</code>では、<code>riscv</code>固有の初期化をする。
+<code>adapter_init()</code>, <code>transport init</code>, <code>dap init</code>でJTAGの初期化をしている？
+<code>target_examine</code>では、<code>RISC-V Debug DM</code>が存在し、正しいステータスを返すかテストしているっぽい。
+次は、これらを詳しくみていく。
+なお、<code>flash init</code>、<code>nand init</code>、<code>pld init</code>は見なくて良さそうなのでとりあえず放置する。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/fpga/>FPGA</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/jtag/>JTAG</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part6/><span class="iconfont icon-article"></span>My RISC-V debug feature part6 (target examine, riscv examine)</a></p><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part4/><span class="iconfont icon-article"></span>My RISC-V debug feature part4</a></p></section><section class="article discussion"><div id=disqus_thread></div><script type=application/javascript>var disqus_config=function(){};(function(){if(["localhost","127.0.0.1"].indexOf(window.location.hostname)!=-1){document.getElementById('disqus_thread').innerHTML='Disqus comments not available by default when the website is previewed locally.';return}var b=document,a=b.createElement('script');a.async=!0,a.src='//https-koyamanx-github-io-ck-dev.disqus.com/embed.js',a.setAttribute('data-timestamp',+new Date),(b.head||b.body).appendChild(a)})()</script><noscript>Please enable JavaScript to view the <a href=https://disqus.com/?ref_noscript>comments powered by Disqus.</a></noscript><a href=https://disqus.com class=dsq-brlink>comments powered by <span class=logo-disqus>Disqus</span></a></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>

@@ -1,0 +1,172 @@
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>My RISC-V debug feature part2&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="My RISC-V debug feature part2"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">My RISC-V debug feature part2</h1><p class="article date">Saturday, April 17, 2021</p></section><article class="article markdown-body"><p>今回はIntel FPGAのVJTAGのIPを試してみる。
+FPGAボードはDE10 Liteを使用する。</p><h3 id=jtagjoint-test-action-group>JTAG(Joint Test Action Group)</h3><p>JTAGについては以下のサイトがわかりやすい。</p><ul><li><a href=http://www.tokudenkairo.co.jp/jtag/adv2018/01.php target=_blank rel="noopener noreferrer">12月1日 JTAGとは何か</a></li><li><a href=http://www.tokudenkairo.co.jp/jtag/adv2018/02.php target=_blank rel="noopener noreferrer">12月2日 JTAGの信号線と波形</a></li><li><a href=http://www.tokudenkairo.co.jp/jtag/adv2018/03.php target=_blank rel="noopener noreferrer">12月3日 データレジスタと命令レジスタ</a></li><li><a href=http://www.tokudenkairo.co.jp/jtag/adv2018/04.php target=_blank rel="noopener noreferrer">12月4日 TAPステートマシン</a></li><li><a href=http://www.tokudenkairo.co.jp/jtag/adv2018/05.php target=_blank rel="noopener noreferrer">12月5日 データレジスタの切り替えと、プライベート命令</a></li><li><a href=https://www.cnblogs.com/shangdawei/p/4753682.html target=_blank rel="noopener noreferrer">JTAG – A technical overview and Timing</a></li></ul><p>JTAGを用いると、ICの端子を操作したり、ICの内部と通信ができるようになる。
+もともと、JTAGはICの端子を操作するバウンダリースキャンのために作られたようである。
+IEEE1149.1は4本の信号線でIC内部と通信するための、プロトコルを定めた規格である。
+今回は、バウンダリースキャンは行わない。プロセッサの内部の状態をriscv-debug-specに沿って操作することを目標とする。
+なお、riscv-debug-specでは、Debug Transport(情報のやり取り)には規定はないが、JTAGの例が乗っている。
+例に乗っ取り、今回は、JTAGを用いる。</p><p>JTAGはIRレジスタとDRレジスタがある。
+これらはシフトレジスタであり、Shift-IR, Shift-DRにてシフトする。
+IRは主にDRの命令(アドレス)を保持する。
+IRは最低2ビット必要である。</p><h4 id=実装の必須な命令は以下である>実装の必須な命令は以下である。</h4><ul><li>BYPASS</li><li>SAMPLE</li><li>PRELOAD</li><li>EXTEST</li></ul><h4 id=オプションな命令>オプションな命令</h4><ul><li>IDCODE</li></ul><h4 id=今回使用する命令>今回使用する命令</h4><ul><li>BYPASS</li><li>IDCODE
+なお、バウンダリースキャンはサポートしない。</li></ul><p>なお、IRレジスタを読み出すときは、前回の値でなくステータスが帰る。
+ステータスは下位２ビットが<code>01</code>であること以外は実装定義である。
+DRはIRによって選択する。
+DRの長さは実装定義で、制御用のソフトウエアはシフト回数を適切に行う必要がある。
+なお、仕様で規定されている必須のDRが存在する。</p><ul><li>IDCODE(IR: 任意)<ul><li>JTAGのIDコードを保持する(32 bit)</li></ul></li><li>BYPASS(IR: すべてのビットが１)<ul><li>1 bitのレジスタ</li><li>実装していない命令などはこちらへ書き込むことが推奨されている</li></ul></li></ul><h3 id=jtag信号線>JTAG信号線</h3><ul><li>TCK (Test Clock)<ul><li>クロック信号</li></ul></li><li>TMS (Test Mode Select)<ul><li>次のステートを決める</li><li>5回以上1を入力するとリセットすることができる</li><li>TCKの立ち上がりエッジ</li></ul></li><li>TDI (Test Data-In)<ul><li>データ入力</li><li>TCKの立ち上がりエッジ</li></ul></li><li>TDO (Test Data-Out)<ul><li>データ出力</li><li>TCKの立ち下がりエッジ</li></ul></li></ul><h3 id=state-machine-of-jtag-tap>State machine of JTAG TAP</h3><p>JTAGの状態はTAP(Test Access Port)が管理する。
+16のステートを持ち、現在の状態とTMSにより次のステートが決まる。
+ステートマシン図を以下に示す。
+<span class=image-container><span class=link><a href=./image01.png target=_blank><img class=img src=./image01.png></a></span></span></p><h4 id=select>Select</h4><p>Select_IRの場合は、IRをオペレーション対象とする。
+Select_DRの場合は、DR Chainを選択し、IRにて、各DRを選択する。</p><h4 id=shift>Shift</h4><p>Shift_DR, Shift_IRにてシフトレジスタをシフトする。
+Shift_DRの場合は、IRの値に応じて、DRが選択され、シフトされる。
+TDIはMSBへ、LSBはTDOへ接続される。
+Shift_IRはIRをシフトする。
+TDIはMSBへ、ステータス(IRの値ではないことに注意)のLSBはTDOへ接続される。</p><h4 id=capture>Capture</h4><p>Capture_DRでは、IRで選択する、DRにパラレルで値を代入する。
+Capture_IRでは、IRへパラレルで値を代入する。
+処理の結果やステート、初期値などをこのステートでDR/IRへ転送する。</p><h4 id=update>Update</h4><p>Updateでは、並列でDRもしくはIRの値を内部ロジックへコピーする。
+なにか、処理をする場合はこのステートで実行する。(RISC-V DebugのDTMにおけるDMI Write・Readなど)</p><p>重要なステートはUpdate, Capture, Shift、Selectである。
+なお、アプリケーションはDRの長さや現在の値、ステートについてしっかり把握して制御する必要がある。
+ステートに関して、どのステートからでも、TMSを５回以上1にしておくことで初期状態へ戻ることができる。</p><h3 id=virtual-jtag>Virtual JTAG</h3><p>今回はVJTAGのIPを使用する。
+VJTAGを用いると、Download Cable(USB-Blaster)を用いて、FPGAとPC間のJTAG通信ができる。
+VJTAGとJTAGの違いは、あまりなく、実際はJTAGと同じ制御をしている。
+しかし、VJTAGのインスタンスは最大255個作成できるため、これらを識別する機能が必要である。
+各インスタンスにはユニークなインデックス(アドレス)が割り当てられ(ユーザが指定可能、指定しない場合はQuartusが合成時に自動割当）
+これを用いて、識別する。
+FPGAのデザイン内で、通信のルーティングを行う仕組みとして、sld_hubがぞんざいする。
+各VJTAGのインスタンスはsld_nodeとなり、sld_hubに接続される。
+以下にブロック図を示す。
+<a href=https://www.intel.com/content/dam/www/programmable/us/en/pdfs/literature/ug/ug_virtualjtag.pdf target=_blank rel="noopener noreferrer">ここより</a>
+引用
+<span class=image-container><span class=link><a href=./image00.png target=_blank><img class=img src=./image00.png></a></span></span>
+よって、アプリケーションはsld_hubを介して、ユーザロジックのVJTAGインスタンス(sld_node)へアクセスする。
+なお、１つしかインスタンスが存在しない場合でも、sld_hubは生成される。
+また、sld_node, sld_hubはLEs(Logic Element)を消費する。
+JTAG TAPは物理ハードウェアとして実装されている。
+以下に、sld_hubおよびsld_nodeの内部ブロック図を図示する。</p><p>IPのドキュメントは以下のリンクより閲覧できる。</p><ul><li><a href=https://www.intel.com/content/dam/www/programmable/us/en/pdfs/literature/ug/ug_virtualjtag.pdf target=_blank rel="noopener noreferrer">Virtual JTAG Intel® FPGA IP Core User Guide</a></li><li><a href=https://www.intel.co.jp/content/www/jp/ja/programmable/documentation/bhc1411109490717.html target=_blank rel="noopener noreferrer">仮想JTAG（altera_virtual_jtag)IP コアのユーザーガイド</a></li></ul><h4 id=virtual-jtagのインスタンスの作成>Virtual JTAGのインスタンスの作成</h4><p>Quartus Megafunctionを使って、Virtual JTAGのインスタンスファイル？を作る。</p><div class=highlight><pre class=chroma><code class=language-verilog data-lang=verilog><span class=c1>// vjtag.v
+</span><span class=c1></span>
+<span class=c1>// Generated using ACDS version 20.1 711
+</span><span class=c1></span>
+<span class=no>`timescale</span> <span class=mh>1</span> <span class=n>ps</span> <span class=o>/</span> <span class=mh>1</span> <span class=n>ps</span>
+<span class=k>module</span> <span class=n>vjtag</span> <span class=p>(</span>
+		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>tdi</span><span class=p>,</span>                <span class=c1>// jtag.tdi
+</span><span class=c1></span>		<span class=k>input</span>  <span class=kt>wire</span>       <span class=n>tdo</span><span class=p>,</span>                <span class=c1>//     .tdo
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span> <span class=p>[</span><span class=mh>4</span><span class=o>:</span><span class=mh>0</span><span class=p>]</span> <span class=n>ir_in</span><span class=p>,</span>              <span class=c1>//     .ir_in
+</span><span class=c1></span>		<span class=k>input</span>  <span class=kt>wire</span> <span class=p>[</span><span class=mh>4</span><span class=o>:</span><span class=mh>0</span><span class=p>]</span> <span class=n>ir_out</span><span class=p>,</span>             <span class=c1>//     .ir_out
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>virtual_state_cdr</span><span class=p>,</span>  <span class=c1>//     .virtual_state_cdr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>virtual_state_sdr</span><span class=p>,</span>  <span class=c1>//     .virtual_state_sdr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>virtual_state_e1dr</span><span class=p>,</span> <span class=c1>//     .virtual_state_e1dr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>virtual_state_pdr</span><span class=p>,</span>  <span class=c1>//     .virtual_state_pdr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>virtual_state_e2dr</span><span class=p>,</span> <span class=c1>//     .virtual_state_e2dr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>virtual_state_udr</span><span class=p>,</span>  <span class=c1>//     .virtual_state_udr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>virtual_state_cir</span><span class=p>,</span>  <span class=c1>//     .virtual_state_cir
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>virtual_state_uir</span><span class=p>,</span>  <span class=c1>//     .virtual_state_uir
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>tms</span><span class=p>,</span>                <span class=c1>//     .tms
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_tlr</span><span class=p>,</span>     <span class=c1>//     .jtag_state_tlr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_rti</span><span class=p>,</span>     <span class=c1>//     .jtag_state_rti
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_sdrs</span><span class=p>,</span>    <span class=c1>//     .jtag_state_sdrs
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_cdr</span><span class=p>,</span>     <span class=c1>//     .jtag_state_cdr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_sdr</span><span class=p>,</span>     <span class=c1>//     .jtag_state_sdr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_e1dr</span><span class=p>,</span>    <span class=c1>//     .jtag_state_e1dr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_pdr</span><span class=p>,</span>     <span class=c1>//     .jtag_state_pdr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_e2dr</span><span class=p>,</span>    <span class=c1>//     .jtag_state_e2dr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_udr</span><span class=p>,</span>     <span class=c1>//     .jtag_state_udr
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_sirs</span><span class=p>,</span>    <span class=c1>//     .jtag_state_sirs
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_cir</span><span class=p>,</span>     <span class=c1>//     .jtag_state_cir
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_sir</span><span class=p>,</span>     <span class=c1>//     .jtag_state_sir
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_e1ir</span><span class=p>,</span>    <span class=c1>//     .jtag_state_e1ir
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_pir</span><span class=p>,</span>     <span class=c1>//     .jtag_state_pir
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_e2ir</span><span class=p>,</span>    <span class=c1>//     .jtag_state_e2ir
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>jtag_state_uir</span><span class=p>,</span>     <span class=c1>//     .jtag_state_uir
+</span><span class=c1></span>		<span class=k>output</span> <span class=kt>wire</span>       <span class=n>tck</span>                 <span class=c1>//  tck.clk
+</span><span class=c1></span>	<span class=p>);</span>
+
+	<span class=n>sld_virtual_jtag</span> <span class=p>#(</span>
+		<span class=p>.</span><span class=n>sld_auto_instance_index</span> <span class=p>(</span><span class=s>&#34;YES&#34;</span><span class=p>),</span>
+		<span class=p>.</span><span class=n>sld_instance_index</span>      <span class=p>(</span><span class=mh>0</span><span class=p>),</span>
+		<span class=p>.</span><span class=n>sld_ir_width</span>            <span class=p>(</span><span class=mh>5</span><span class=p>)</span>
+	<span class=p>)</span> <span class=n>virtual_jtag_0</span> <span class=p>(</span>
+		<span class=p>.</span><span class=n>tdi</span>                <span class=p>(</span><span class=n>tdi</span><span class=p>),</span>                <span class=c1>// jtag.tdi
+</span><span class=c1></span>		<span class=p>.</span><span class=n>tdo</span>                <span class=p>(</span><span class=n>tdo</span><span class=p>),</span>                <span class=c1>//     .tdo
+</span><span class=c1></span>		<span class=p>.</span><span class=n>ir_in</span>              <span class=p>(</span><span class=n>ir_in</span><span class=p>),</span>              <span class=c1>//     .ir_in
+</span><span class=c1></span>		<span class=p>.</span><span class=n>ir_out</span>             <span class=p>(</span><span class=n>ir_out</span><span class=p>),</span>             <span class=c1>//     .ir_out
+</span><span class=c1></span>		<span class=p>.</span><span class=n>virtual_state_cdr</span>  <span class=p>(</span><span class=n>virtual_state_cdr</span><span class=p>),</span>  <span class=c1>//     .virtual_state_cdr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>virtual_state_sdr</span>  <span class=p>(</span><span class=n>virtual_state_sdr</span><span class=p>),</span>  <span class=c1>//     .virtual_state_sdr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>virtual_state_e1dr</span> <span class=p>(</span><span class=n>virtual_state_e1dr</span><span class=p>),</span> <span class=c1>//     .virtual_state_e1dr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>virtual_state_pdr</span>  <span class=p>(</span><span class=n>virtual_state_pdr</span><span class=p>),</span>  <span class=c1>//     .virtual_state_pdr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>virtual_state_e2dr</span> <span class=p>(</span><span class=n>virtual_state_e2dr</span><span class=p>),</span> <span class=c1>//     .virtual_state_e2dr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>virtual_state_udr</span>  <span class=p>(</span><span class=n>virtual_state_udr</span><span class=p>),</span>  <span class=c1>//     .virtual_state_udr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>virtual_state_cir</span>  <span class=p>(</span><span class=n>virtual_state_cir</span><span class=p>),</span>  <span class=c1>//     .virtual_state_cir
+</span><span class=c1></span>		<span class=p>.</span><span class=n>virtual_state_uir</span>  <span class=p>(</span><span class=n>virtual_state_uir</span><span class=p>),</span>  <span class=c1>//     .virtual_state_uir
+</span><span class=c1></span>		<span class=p>.</span><span class=n>tms</span>                <span class=p>(</span><span class=n>tms</span><span class=p>),</span>                <span class=c1>//     .tms
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_tlr</span>     <span class=p>(</span><span class=n>jtag_state_tlr</span><span class=p>),</span>     <span class=c1>//     .jtag_state_tlr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_rti</span>     <span class=p>(</span><span class=n>jtag_state_rti</span><span class=p>),</span>     <span class=c1>//     .jtag_state_rti
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_sdrs</span>    <span class=p>(</span><span class=n>jtag_state_sdrs</span><span class=p>),</span>    <span class=c1>//     .jtag_state_sdrs
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_cdr</span>     <span class=p>(</span><span class=n>jtag_state_cdr</span><span class=p>),</span>     <span class=c1>//     .jtag_state_cdr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_sdr</span>     <span class=p>(</span><span class=n>jtag_state_sdr</span><span class=p>),</span>     <span class=c1>//     .jtag_state_sdr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_e1dr</span>    <span class=p>(</span><span class=n>jtag_state_e1dr</span><span class=p>),</span>    <span class=c1>//     .jtag_state_e1dr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_pdr</span>     <span class=p>(</span><span class=n>jtag_state_pdr</span><span class=p>),</span>     <span class=c1>//     .jtag_state_pdr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_e2dr</span>    <span class=p>(</span><span class=n>jtag_state_e2dr</span><span class=p>),</span>    <span class=c1>//     .jtag_state_e2dr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_udr</span>     <span class=p>(</span><span class=n>jtag_state_udr</span><span class=p>),</span>     <span class=c1>//     .jtag_state_udr
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_sirs</span>    <span class=p>(</span><span class=n>jtag_state_sirs</span><span class=p>),</span>    <span class=c1>//     .jtag_state_sirs
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_cir</span>     <span class=p>(</span><span class=n>jtag_state_cir</span><span class=p>),</span>     <span class=c1>//     .jtag_state_cir
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_sir</span>     <span class=p>(</span><span class=n>jtag_state_sir</span><span class=p>),</span>     <span class=c1>//     .jtag_state_sir
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_e1ir</span>    <span class=p>(</span><span class=n>jtag_state_e1ir</span><span class=p>),</span>    <span class=c1>//     .jtag_state_e1ir
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_pir</span>     <span class=p>(</span><span class=n>jtag_state_pir</span><span class=p>),</span>     <span class=c1>//     .jtag_state_pir
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_e2ir</span>    <span class=p>(</span><span class=n>jtag_state_e2ir</span><span class=p>),</span>    <span class=c1>//     .jtag_state_e2ir
+</span><span class=c1></span>		<span class=p>.</span><span class=n>jtag_state_uir</span>     <span class=p>(</span><span class=n>jtag_state_uir</span><span class=p>),</span>     <span class=c1>//     .jtag_state_uir
+</span><span class=c1></span>		<span class=p>.</span><span class=n>tck</span>                <span class=p>(</span><span class=n>tck</span><span class=p>)</span>                 <span class=c1>//  tck.clk
+</span><span class=c1></span>	<span class=p>);</span>
+<span class=k>endmodule</span>
+</code></pre></div><p>NSLから使えるようにヘッダーファイルを書く。
+なお、クロック供給などは不要で、合成時にうまくやってくれる。
+ちなみに、JTAGのコントローラーは別に実装されているらしく、クロックやtdi, tdoなどの信号は
+sld_hubなどに供給されるようである。
+しかし、VJTAGのインスタンス(sld_node)や(sld_hub)はロジックエレメントを消費する。
+<code>jtag_*</code>の信号はデバック用途であり、使用不可である。
+この信号はJTAGのコントローラーから来ている。
+<code>virtual_*</code>の信号はVJTAGのステートマシンの状態である。</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=n>declare</span> <span class=n>vjtag</span> <span class=n>interface</span> <span class=p>{</span>
+	<span class=n>output</span>		<span class=n>tdi</span><span class=p>;</span>
+	<span class=n>input</span>		<span class=n>tdo</span><span class=p>;</span>
+	<span class=n>output</span>		<span class=n>ir_in</span><span class=p>[</span><span class=mi>5</span><span class=p>];</span>
+	<span class=n>input</span>		<span class=n>ir_out</span><span class=p>[</span><span class=mi>5</span><span class=p>];</span>
+	<span class=n>func_out</span>	<span class=n>virtual_state_cdr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>virtual_state_sdr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>virtual_state_e1dr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>virtual_state_pdr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>virtual_state_e2dr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>virtual_state_udr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>virtual_state_cir</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>virtual_state_uir</span><span class=p>;</span>
+	<span class=n>output</span>		<span class=n>tms</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_tlr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_rti</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_sdrs</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_cdr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_sdr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_e1dr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_pdr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_e2dr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_udr</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_sirs</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_cir</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_sir</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_e1ir</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_pir</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_e2ir</span><span class=p>;</span>
+	<span class=n>func_out</span>	<span class=n>jtag_state_uir</span><span class=p>;</span>
+	<span class=n>output</span>		<span class=n>tck</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><h3 id=vjtagとの通信>VJTAGとの通信</h3><p>VJTAGのインスタンスと通信するには、まずsld_hubと通信をする必要がある。
+sld_hubには２つのオペレーションが定義されている。
+なお、sld_hubのIRはインスタンスによらず、10bitである。
+sld_hubに接続されているインスタンスの情報を取り出すことができるが、今回は省略する。
+ドキュメントおよび<code>riscv-openocd/src/target/riscv/riscv_tap_vjtag.c</code>を見てほしい。
+なお、VJTAGのインスタンスのIR/DRはsld_hubのサブセットという形な模様。
+そのため、それぞれVIR(Virtual IR)およびVDR(Virtual DR)と呼ばれている。
+ブロック図を以下に示す(仕様から書き起こしたので、もしかしたら間違いがあるかもしれない）。
+<span class=image-container><span class=link><a href=./image02.png target=_blank><img class=img src=./image02.png></a></span></span></p><p>なお、sld_hubには、２つの命令がある。
+これは、Shift_IRを用いてsld_hubのIR(10 bit)へ書き込むことで命令を発行できる。</p><ul><li>USER0
+VDRのパスを選択する。</li><li>USER1
+VIRのパスを選択する。</li></ul><p>OpenOCDでは、or1kのみVJTAGに対応している。
+次からは、OpenOCDのRISC-VターゲットにVJTAGサポートを行う。
+その後、実際にOpenOCDからVJTAG on DE10-Liteに通信ができるかテストをする。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/jtag/>JTAG</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/fpga/>FPGA</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part3/><span class="iconfont icon-article"></span>My RISC-V debug feature part3</a></p><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part1/><span class="iconfont icon-article"></span>My RISC-V debug feature part1</a></p></section><section class="article discussion"><div id=disqus_thread></div><script type=application/javascript>var disqus_config=function(){};(function(){if(["localhost","127.0.0.1"].indexOf(window.location.hostname)!=-1){document.getElementById('disqus_thread').innerHTML='Disqus comments not available by default when the website is previewed locally.';return}var b=document,a=b.createElement('script');a.async=!0,a.src='//https-koyamanx-github-io-ck-dev.disqus.com/embed.js',a.setAttribute('data-timestamp',+new Date),(b.head||b.body).appendChild(a)})()</script><noscript>Please enable JavaScript to view the <a href=https://disqus.com/?ref_noscript>comments powered by Disqus.</a></noscript><a href=https://disqus.com class=dsq-brlink>comments powered by <span class=logo-disqus>Disqus</span></a></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>

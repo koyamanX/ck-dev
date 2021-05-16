@@ -1,0 +1,690 @@
+<!doctype html><html lang=en><meta charset=utf-8><meta name=generator content="Hugo 0.82.0"><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name=color-scheme content="light dark"><meta name=supported-color-schemes content="light dark"><title>Reading linux kernel part3&nbsp;&ndash;&nbsp;ck-dev</title><link rel=stylesheet href=https://koyamanx.github.io/ck-dev/css/core.min.3ad30501c32a51e6255508e9b30685dba7abb22436bad9f6836882eb9a79698ca0598981990d0789c1808e089fbf7176.css integrity=sha384-OtMFAcMqUeYlVQjpswaF26ersiQ2utn2g2iC65p5aYygWYmBmQ0HicGAjgifv3F2><meta name=twitter:card content="summary"><meta name=twitter:title content="Reading linux kernel part3"><body><section id=header><div class="header wrap"><span class="header left-side"><a class="site home" href=https://koyamanx.github.io/ck-dev/><span class="site name">ck-dev</span></a></span>
+<span class="header right-side"><div class="nav wrap"><nav class=nav><a class="nav item" href=https://koyamanx.github.io/ck-dev/categories/>Categories</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/tags/>Tags</a><a class="nav item" href=https://koyamanx.github.io/ck-dev/about>About</a></nav></div></span></div><div class="site slogan"><span class=title>Notes for myself</span></div></section><section id=content><div class=article-container><section class="article header"><h1 class="article title">Reading linux kernel part3</h1><p class="article date">Wednesday, March 24, 2021</p></section><article class="article markdown-body"><p><code>setup_vm</code>の実装を読んでいく。</p><h2 id=setup_vm>setup_vm</h2><p><code>arch/riscv/mm/init.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=n>asmlinkage</span> <span class=kt>void</span> <span class=n>__init</span> <span class=nf>setup_vm</span><span class=p>(</span><span class=n>uintptr_t</span> <span class=n>dtb_pa</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>uintptr_t</span> <span class=n>va</span><span class=p>,</span> <span class=n>end_va</span><span class=p>;</span>
+	<span class=n>uintptr_t</span> <span class=n>load_pa</span> <span class=o>=</span> <span class=p>(</span><span class=n>uintptr_t</span><span class=p>)(</span><span class=o>&amp;</span><span class=n>_start</span><span class=p>);</span>
+	<span class=n>uintptr_t</span> <span class=n>load_sz</span> <span class=o>=</span> <span class=p>(</span><span class=n>uintptr_t</span><span class=p>)(</span><span class=o>&amp;</span><span class=n>_end</span><span class=p>)</span> <span class=o>-</span> <span class=n>load_pa</span><span class=p>;</span>
+	<span class=n>uintptr_t</span> <span class=n>map_size</span> <span class=o>=</span> <span class=n>best_map_size</span><span class=p>(</span><span class=n>load_pa</span><span class=p>,</span> <span class=n>MAX_EARLY_MAPPING_SIZE</span><span class=p>);</span>
+
+	<span class=n>va_pa_offset</span> <span class=o>=</span> <span class=n>PAGE_OFFSET</span> <span class=o>-</span> <span class=n>load_pa</span><span class=p>;</span>
+	<span class=n>pfn_base</span> <span class=o>=</span> <span class=n>PFN_DOWN</span><span class=p>(</span><span class=n>load_pa</span><span class=p>);</span>
+
+	<span class=cm>/*
+</span><span class=cm>	 * Enforce boot alignment requirements of RV32 and
+</span><span class=cm>	 * RV64 by only allowing PMD or PGD mappings.
+</span><span class=cm>	 */</span>
+	<span class=n>BUG_ON</span><span class=p>(</span><span class=n>map_size</span> <span class=o>==</span> <span class=n>PAGE_SIZE</span><span class=p>);</span>
+
+	<span class=cm>/* Sanity check alignment and size */</span>
+	<span class=n>BUG_ON</span><span class=p>((</span><span class=n>PAGE_OFFSET</span> <span class=o>%</span> <span class=n>PGDIR_SIZE</span><span class=p>)</span> <span class=o>!=</span> <span class=mi>0</span><span class=p>);</span>
+	<span class=n>BUG_ON</span><span class=p>((</span><span class=n>load_pa</span> <span class=o>%</span> <span class=n>map_size</span><span class=p>)</span> <span class=o>!=</span> <span class=mi>0</span><span class=p>);</span>
+	<span class=n>BUG_ON</span><span class=p>(</span><span class=n>load_sz</span> <span class=o>&gt;</span> <span class=n>MAX_EARLY_MAPPING_SIZE</span><span class=p>);</span>
+
+	<span class=cm>/* Setup early PGD for fixmap */</span>
+	<span class=n>create_pgd_mapping</span><span class=p>(</span><span class=n>early_pg_dir</span><span class=p>,</span> <span class=n>FIXADDR_START</span><span class=p>,</span>
+			   <span class=p>(</span><span class=n>uintptr_t</span><span class=p>)</span><span class=n>fixmap_pgd_next</span><span class=p>,</span> <span class=n>PGDIR_SIZE</span><span class=p>,</span> <span class=n>PAGE_TABLE</span><span class=p>);</span>
+</code></pre></div><p><code>BUG_ON</code>は、コンディションがtrueの場合、panicするものである。</p><p><code>include/asm-generic/bug.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=err>/*</span>
+ <span class=err>*</span> <span class=nf>Don</span><span class=err>&#39;</span><span class=no>t</span> <span class=no>use</span> <span class=no>BUG</span><span class=p>()</span> <span class=no>or</span> <span class=no>BUG_ON</span><span class=p>()</span> <span class=no>unless</span> <span class=no>there</span><span class=err>&#39;</span><span class=no>s</span> <span class=no>really</span> <span class=no>no</span> <span class=no>way</span> <span class=no>out</span><span class=c>; one
+</span><span class=c></span> <span class=p>*</span> <span class=no>example</span> <span class=no>might</span> <span class=no>be</span> <span class=no>detecting</span> <span class=no>data</span> <span class=no>structure</span> <span class=no>corruption</span> <span class=no>in</span> <span class=no>the</span> <span class=no>middle</span>
+ <span class=err>*</span> <span class=nf>of</span> <span class=no>an</span> <span class=no>operation</span> <span class=no>that</span> <span class=no>can</span><span class=err>&#39;</span><span class=no>t</span> <span class=no>be</span> <span class=no>backed</span> <span class=no>out</span> <span class=no>of.</span>  <span class=no>If</span> <span class=no>the</span> <span class=p>(</span><span class=no>sub</span><span class=p>)</span><span class=no>system</span>
+ <span class=err>*</span> <span class=nf>can</span> <span class=no>somehow</span> <span class=no>continue</span> <span class=no>operating</span><span class=p>,</span> <span class=no>perhaps</span> <span class=no>with</span> <span class=no>reduced</span> <span class=no>functionality</span><span class=p>,</span>
+ <span class=err>*</span> <span class=nf>it</span><span class=err>&#39;</span><span class=no>s</span> <span class=no>probably</span> <span class=no>not</span> <span class=no>BUG-worthy.</span>
+ <span class=err>*</span>
+ <span class=err>*</span> <span class=nf>If</span> <span class=no>you</span><span class=err>&#39;</span><span class=no>re</span> <span class=no>tempted</span> <span class=no>to</span> <span class=no>BUG</span><span class=p>(),</span> <span class=no>think</span> <span class=no>again</span><span class=p>:</span>  <span class=no>is</span> <span class=no>completely</span> <span class=no>giving</span> <span class=no>up</span>
+ <span class=err>*</span> <span class=nf>really</span> <span class=no>the</span> <span class=p>*</span><span class=no>only</span><span class=p>*</span> <span class=no>solution</span><span class=err>?</span>  <span class=no>There</span> <span class=no>are</span> <span class=no>usually</span> <span class=no>better</span> <span class=no>options</span><span class=p>,</span> <span class=no>where</span>
+ <span class=err>*</span> <span class=nf>users</span> <span class=no>don</span><span class=err>&#39;</span><span class=no>t</span> <span class=no>need</span> <span class=no>to</span> <span class=no>reboot</span> <span class=no>ASAP</span> <span class=no>and</span> <span class=no>can</span> <span class=no>mostly</span> <span class=no>shut</span> <span class=no>down</span> <span class=no>cleanly.</span>
+ <span class=err>*/</span>
+<span class=c>#ifndef HAVE_ARCH_BUG
+</span><span class=c>#define BUG() do { \
+</span><span class=c></span>	<span class=nf>printk</span><span class=p>(</span><span class=err>&#34;</span><span class=no>BUG</span><span class=p>:</span> <span class=no>failure</span> <span class=no>at</span> <span class=nv>%s</span><span class=p>:</span><span class=nv>%d</span><span class=err>/</span><span class=nv>%s</span><span class=p>()!</span><span class=err>\</span><span class=no>n</span><span class=err>&#34;</span><span class=p>,</span> <span class=no>__FILE__</span><span class=p>,</span> <span class=no>__LINE__</span><span class=p>,</span> <span class=no>__func__</span><span class=p>)</span><span class=c>; \
+</span><span class=c></span>	<span class=no>barrier_before_unreachable</span><span class=p>()</span><span class=c>; \
+</span><span class=c></span>	<span class=no>panic</span><span class=p>(</span><span class=err>&#34;</span><span class=no>BUG</span><span class=p>!</span><span class=err>&#34;</span><span class=p>)</span><span class=c>; \
+</span><span class=c></span><span class=err>}</span> <span class=no>while</span> <span class=p>(</span><span class=mi>0</span><span class=p>)</span>
+<span class=c>#endif
+</span><span class=c></span>
+<span class=c>#ifndef HAVE_ARCH_BUG_ON
+</span><span class=c>#define BUG_ON(condition) do { if (unlikely(condition)) BUG(); } while (0)
+</span><span class=c>#endif
+</span></code></pre></div><p>なお、<code>unlikely</code>、<code>likely</code>は条件分岐において、ヒントとしてコンパイラへ与え、通常時の処理を最適化を行う。
+<code>include/linux/compiler.h</code></p><div class=highlight><pre class=chroma><code class=language-asm data-lang=asm><span class=c># define likely(x)	__builtin_expect(!!(x), 1)
+</span><span class=c># define unlikely(x)	__builtin_expect(!!(x), 0)
+</span></code></pre></div><p><code>setup_vm</code>で最初に行う処理は</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=n>create_pgd_mapping</span><span class=p>(</span><span class=n>early_pg_dir</span><span class=p>,</span> <span class=n>FIXADDR_START</span><span class=p>,</span>
+			   <span class=p>(</span><span class=n>uintptr_t</span><span class=p>)</span><span class=n>fixmap_pgd_next</span><span class=p>,</span> <span class=n>PGDIR_SIZE</span><span class=p>,</span> <span class=n>PAGE_TABLE</span><span class=p>);</span>
+</code></pre></div><p>である。
+<code>PGD</code>において、マッピングの作成を行う関数のよう。
+引数をよく見てみる。</p><p><code>arch/linux/riscv/mm/init.c</code></p><pre><code>static void __init create_pgd_mapping(pgd_t *pgdp,
+				      uintptr_t va, phys_addr_t pa,
+				      phys_addr_t sz, pgprot_t prot)
+{
+	pgd_next_t *nextp;
+	phys_addr_t next_phys;
+	uintptr_t pgd_idx = pgd_index(va);
+
+	if (sz == PGDIR_SIZE) {
+		if (pgd_val(pgdp[pgd_idx]) == 0)
+			pgdp[pgd_idx] = pfn_pgd(PFN_DOWN(pa), prot);
+		return;
+	}
+
+	if (pgd_val(pgdp[pgd_idx]) == 0) {
+		next_phys = alloc_pgd_next(va);
+		pgdp[pgd_idx] = pfn_pgd(PFN_DOWN(next_phys), PAGE_TABLE);
+		nextp = get_pgd_next_virt(next_phys);
+		memset(nextp, 0, PAGE_SIZE);
+	} else {
+		next_phys = PFN_PHYS(_pgd_pfn(pgdp[pgd_idx]));
+		nextp = get_pgd_next_virt(next_phys);
+	}
+
+	create_pgd_next_mapping(nextp, va, pa, sz, prot);
+}
+</code></pre><p><code>pgdp</code>はPGDへのポインタである。
+<code>va</code>は仮想アドレスで、<code>pa</code>にページをマッピングする。
+<code>sz</code>はマッピングのサイズであり、<code>prot</code>はPTEのプロテクションビットである。</p><p><code>uintptr_t pgd_idx = pgd_index(va);</code>で、アドレスに対するPGDのindexを求めている。</p><p>次に、<code>PGDIR_SIZE</code>が作成するマップサイズか確かめている。<code>PGDIR_SIZE</code>はSV32の場合、4MBになる。
+つまり、4MBのマッピングを作る場合は、一つのPGDエントリーで十分である。</p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=k>if</span> <span class=p>(</span><span class=n>sz</span> <span class=o>==</span> <span class=n>PGDIR_SIZE</span><span class=p>)</span> <span class=p>{</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>pgd_val</span><span class=p>(</span><span class=n>pgdp</span><span class=p>[</span><span class=n>pgd_idx</span><span class=p>])</span> <span class=o>==</span> <span class=mi>0</span><span class=p>)</span>
+			<span class=n>pgdp</span><span class=p>[</span><span class=n>pgd_idx</span><span class=p>]</span> <span class=o>=</span> <span class=n>pfn_pgd</span><span class=p>(</span><span class=n>PFN_DOWN</span><span class=p>(</span><span class=n>pa</span><span class=p>),</span> <span class=n>prot</span><span class=p>);</span>
+		<span class=k>return</span><span class=p>;</span>
+	<span class=p>}</span>
+</code></pre></div><p>先程求めたindexを使い、PGDにエントリーすでに存在しない場合は、<code>pfn_pgd</code>にてエントリーを作成する。
+<code>PFN_DOWN</code>はアドレスから<code>PFN</code>を求める。</p><p><code>arch/riscv/include/asm/pgtable.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kr>inline</span> <span class=n>pgd_t</span> <span class=nf>pfn_pgd</span><span class=p>(</span><span class=kt>unsigned</span> <span class=kt>long</span> <span class=n>pfn</span><span class=p>,</span> <span class=n>pgprot_t</span> <span class=n>prot</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>return</span> <span class=n>__pgd</span><span class=p>((</span><span class=n>pfn</span> <span class=o>&lt;&lt;</span> <span class=n>_PAGE_PFN_SHIFT</span><span class=p>)</span> <span class=o>|</span> <span class=n>pgprot_val</span><span class=p>(</span><span class=n>prot</span><span class=p>));</span>
+<span class=p>}</span>
+</code></pre></div><p><code>include/linux/pfn.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#define PFN_UP(x)	(((x) + PAGE_SIZE-1) &gt;&gt; PAGE_SHIFT)
+</span><span class=cp>#define PFN_DOWN(x)	((x) &gt;&gt; PAGE_SHIFT)
+</span></code></pre></div><p><code>PGDIR_SIZE</code>でないマッピングを<code>PGD</code>に作る場合を考える。</p><p><code>arch/riscv/mm/init.c setup_vm続き</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=k>if</span> <span class=p>(</span><span class=n>pgd_val</span><span class=p>(</span><span class=n>pgdp</span><span class=p>[</span><span class=n>pgd_idx</span><span class=p>])</span> <span class=o>==</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>next_phys</span> <span class=o>=</span> <span class=n>alloc_pgd_next</span><span class=p>(</span><span class=n>va</span><span class=p>);</span>
+		<span class=n>pgdp</span><span class=p>[</span><span class=n>pgd_idx</span><span class=p>]</span> <span class=o>=</span> <span class=n>pfn_pgd</span><span class=p>(</span><span class=n>PFN_DOWN</span><span class=p>(</span><span class=n>next_phys</span><span class=p>),</span> <span class=n>PAGE_TABLE</span><span class=p>);</span>
+		<span class=n>nextp</span> <span class=o>=</span> <span class=n>get_pgd_next_virt</span><span class=p>(</span><span class=n>next_phys</span><span class=p>);</span>
+		<span class=n>memset</span><span class=p>(</span><span class=n>nextp</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>PAGE_SIZE</span><span class=p>);</span>
+	<span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+		<span class=n>next_phys</span> <span class=o>=</span> <span class=n>PFN_PHYS</span><span class=p>(</span><span class=n>_pgd_pfn</span><span class=p>(</span><span class=n>pgdp</span><span class=p>[</span><span class=n>pgd_idx</span><span class=p>]));</span>
+		<span class=n>nextp</span> <span class=o>=</span> <span class=n>get_pgd_next_virt</span><span class=p>(</span><span class=n>next_phys</span><span class=p>);</span>
+	<span class=p>}</span>
+
+	<span class=n>create_pgd_next_mapping</span><span class=p>(</span><span class=n>nextp</span><span class=p>,</span> <span class=n>va</span><span class=p>,</span> <span class=n>pa</span><span class=p>,</span> <span class=n>sz</span><span class=p>,</span> <span class=n>prot</span><span class=p>);</span>
+</code></pre></div><p>エントリーがPGDに存在するか確かめる。まずは、存在しない(true)の場合を見ていく。
+<code>alloc_pgd_next</code>はPGDの次のレベルのテーブルを作る。SV32の場合はPUD、PMDはFOLDEDされているため、次のレベルはページテーブルである。
+つまり、実体は<code>alloc_pte</code>となる。
+<code>pgdp</code>に作成したページテーブルを挿入する。
+なお、PAGE_TABLEというprotは、PRESET(V bit)のみが立っている状態で、non-leaf PTEを指す。</p><p><code>arch/riscv/mm/init.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#ifndef __PAGETABLE_PMD_FOLDED
+</span><span class=cp></span><span class=p>...</span>
+<span class=cp>#define pgd_next_t		pte_t
+</span><span class=cp>#define alloc_pgd_next(__va)	alloc_pte(__va)
+</span><span class=cp>#define get_pgd_next_virt(__pa)	get_pte_virt(__pa)
+</span><span class=cp>#define create_pgd_next_mapping(__nextp, __va, __pa, __sz, __prot)	\
+</span><span class=cp>	create_pte_mapping(__nextp, __va, __pa, __sz, __prot)
+</span><span class=cp>#define fixmap_pgd_next		fixmap_pte
+</span><span class=cp>#endif
+</span><span class=cp></span><span class=p>...</span>
+<span class=k>static</span> <span class=n>phys_addr_t</span> <span class=n>__init</span> <span class=n>alloc_pte</span><span class=p>(</span><span class=n>uintptr_t</span> <span class=n>va</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=cm>/*
+</span><span class=cm>	 * We only create PMD or PGD early mappings so we
+</span><span class=cm>	 * should never reach here with MMU disabled.
+</span><span class=cm>	 */</span>
+	<span class=n>BUG_ON</span><span class=p>(</span><span class=o>!</span><span class=n>mmu_enabled</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=nf>memblock_phys_alloc</span><span class=p>(</span><span class=n>PAGE_SIZE</span><span class=p>,</span> <span class=n>PAGE_SIZE</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><h2 id=memblock>memblock</h2><p><code>memblock</code>はブート時にカーネルが使用するメモリ管理の手法である。
+<code>memblock</code>にはAPIが用意されており、このAPIを通して、メモリの追加、取得等を行う。
+まずは、構造体を見てみる。</p><p><code>include/linux/memblock.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/**
+</span><span class=cm> * struct memblock - memblock allocator metadata
+</span><span class=cm> * @bottom_up: is bottom up direction?
+</span><span class=cm> * @current_limit: physical address of the current allocation limit
+</span><span class=cm> * @memory: usable memory regions
+</span><span class=cm> * @reserved: reserved memory regions
+</span><span class=cm> */</span>
+<span class=k>struct</span> <span class=n>memblock</span> <span class=p>{</span>
+	<span class=kt>bool</span> <span class=n>bottom_up</span><span class=p>;</span>  <span class=cm>/* is bottom up direction? */</span>
+	<span class=n>phys_addr_t</span> <span class=n>current_limit</span><span class=p>;</span>
+	<span class=k>struct</span> <span class=n>memblock_type</span> <span class=n>memory</span><span class=p>;</span>
+	<span class=k>struct</span> <span class=n>memblock_type</span> <span class=n>reserved</span><span class=p>;</span>
+<span class=p>};</span>
+
+<span class=cm>/**
+</span><span class=cm> * struct memblock_type - collection of memory regions of certain type
+</span><span class=cm> * @cnt: number of regions
+</span><span class=cm> * @max: size of the allocated array
+</span><span class=cm> * @total_size: size of all regions
+</span><span class=cm> * @regions: array of regions
+</span><span class=cm> * @name: the memory type symbolic name
+</span><span class=cm> */</span>
+<span class=k>struct</span> <span class=n>memblock_type</span> <span class=p>{</span>
+	<span class=kt>unsigned</span> <span class=kt>long</span> <span class=n>cnt</span><span class=p>;</span>
+	<span class=kt>unsigned</span> <span class=kt>long</span> <span class=n>max</span><span class=p>;</span>
+	<span class=n>phys_addr_t</span> <span class=n>total_size</span><span class=p>;</span>
+	<span class=k>struct</span> <span class=n>memblock_region</span> <span class=o>*</span><span class=n>regions</span><span class=p>;</span>
+	<span class=kt>char</span> <span class=o>*</span><span class=n>name</span><span class=p>;</span>
+<span class=p>};</span>
+
+<span class=cm>/**
+</span><span class=cm> * struct memblock_region - represents a memory region
+</span><span class=cm> * @base: base address of the region
+</span><span class=cm> * @size: size of the region
+</span><span class=cm> * @flags: memory region attributes
+</span><span class=cm> * @nid: NUMA node id
+</span><span class=cm> */</span>
+<span class=k>struct</span> <span class=n>memblock_region</span> <span class=p>{</span>
+	<span class=n>phys_addr_t</span> <span class=n>base</span><span class=p>;</span>
+	<span class=n>phys_addr_t</span> <span class=n>size</span><span class=p>;</span>
+	<span class=k>enum</span> <span class=n>memblock_flags</span> <span class=n>flags</span><span class=p>;</span>
+<span class=cp>#ifdef CONFIG_NEED_MULTIPLE_NODES
+</span><span class=cp></span>	<span class=kt>int</span> <span class=n>nid</span><span class=p>;</span>
+<span class=cp>#endif
+</span><span class=cp></span><span class=p>};</span>
+
+<span class=cm>/**
+</span><span class=cm> * enum memblock_flags - definition of memory region attributes
+</span><span class=cm> * @MEMBLOCK_NONE: no special request
+</span><span class=cm> * @MEMBLOCK_HOTPLUG: hotpluggable region
+</span><span class=cm> * @MEMBLOCK_MIRROR: mirrored region
+</span><span class=cm> * @MEMBLOCK_NOMAP: don&#39;t add to kernel direct mapping
+</span><span class=cm> */</span>
+<span class=k>enum</span> <span class=n>memblock_flags</span> <span class=p>{</span>
+	<span class=n>MEMBLOCK_NONE</span>		<span class=o>=</span> <span class=mh>0x0</span><span class=p>,</span>	<span class=cm>/* No special request */</span>
+	<span class=n>MEMBLOCK_HOTPLUG</span>	<span class=o>=</span> <span class=mh>0x1</span><span class=p>,</span>	<span class=cm>/* hotpluggable region */</span>
+	<span class=n>MEMBLOCK_MIRROR</span>		<span class=o>=</span> <span class=mh>0x2</span><span class=p>,</span>	<span class=cm>/* mirrored region */</span>
+	<span class=n>MEMBLOCK_NOMAP</span>		<span class=o>=</span> <span class=mh>0x4</span><span class=p>,</span>	<span class=cm>/* don&#39;t add to kernel direct mapping */</span>
+<span class=p>};</span>
+</code></pre></div><h3 id=struct-memblockについて><code>struct memblock</code>について。</h3><p><code>memblock.bottom_up</code>はbottom upでメモリ確保をするかを示すフラグである。
+<code>memblock.current_limit</code>は物理メモリの上限サイズである。
+<code>memblock.memory</code>は使用可能メモリの領域で、<code>memblock.reserved</code>は予約領域である。</p><h3 id=struct-memblock_typeについて><code>struct memblock_type</code>について。</h3><p>順番は違うが、まず、<code>memblock_type.regions</code>はメモリの領域(<code>struct memblock_region</code>の配列)である。
+<code>memblock_type.cnt</code>は<code>memblock_type.regions</code>の数で、
+<code>max</code>は<code>memblock_regions</code>のトータルサイズ、
+<code>memblock_type.total_size</code>は、確保したモリ領域のトータルサイズである。
+<code>memblock_type.name</code>はメモリブロックの名前である。</p><h3 id=memblock_regionである><code>memblock_region</code>である。</h3><p><code>memblock_region</code>はメモリ領域を表す構造体であり、<code>memblock_region.base</code>は領域のベースアドレス、<code>memblock_region.size</code>は領域のサイズ、<code>memblock_region.flags</code>は領域に対するフラグである。
+フラグは<code>enum memblock_flags</code>で表される。</p><h3 id=memblockの初期化>memblockの初期化</h3><p><code>mm/memblock.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>struct</span> <span class=n>memblock</span> <span class=n>memblock</span> <span class=n>__initdata_memblock</span> <span class=o>=</span> <span class=p>{</span>
+	<span class=p>.</span><span class=n>memory</span><span class=p>.</span><span class=n>regions</span>		<span class=o>=</span> <span class=n>memblock_memory_init_regions</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>memory</span><span class=p>.</span><span class=n>cnt</span>		<span class=o>=</span> <span class=mi>1</span><span class=p>,</span>	<span class=cm>/* empty dummy entry */</span>
+	<span class=p>.</span><span class=n>memory</span><span class=p>.</span><span class=n>max</span>		<span class=o>=</span> <span class=n>INIT_MEMBLOCK_REGIONS</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>memory</span><span class=p>.</span><span class=n>name</span>		<span class=o>=</span> <span class=s>&#34;memory&#34;</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>reserved</span><span class=p>.</span><span class=n>regions</span>	<span class=o>=</span> <span class=n>memblock_reserved_init_regions</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>reserved</span><span class=p>.</span><span class=n>cnt</span>		<span class=o>=</span> <span class=mi>1</span><span class=p>,</span>	<span class=cm>/* empty dummy entry */</span>
+	<span class=p>.</span><span class=n>reserved</span><span class=p>.</span><span class=n>max</span>		<span class=o>=</span> <span class=n>INIT_MEMBLOCK_RESERVED_REGIONS</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>reserved</span><span class=p>.</span><span class=n>name</span>		<span class=o>=</span> <span class=s>&#34;reserved&#34;</span><span class=p>,</span>
+
+	<span class=p>.</span><span class=n>bottom_up</span>		<span class=o>=</span> <span class=nb>false</span><span class=p>,</span>
+	<span class=p>.</span><span class=n>current_limit</span>		<span class=o>=</span> <span class=n>MEMBLOCK_ALLOC_ANYWHERE</span><span class=p>,</span>
+<span class=p>};</span>
+<span class=p>...</span>
+<span class=cp>#define INIT_MEMBLOCK_REGIONS			128
+</span><span class=cp>#define INIT_PHYSMEM_REGIONS			4
+</span><span class=cp>#ifndef INIT_MEMBLOCK_RESERVED_REGIONS
+</span><span class=cp># define INIT_MEMBLOCK_RESERVED_REGIONS		INIT_MEMBLOCK_REGIONS
+</span></code></pre></div><p><code>include/linux/memblock.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#define MEMBLOCK_ALLOC_ANYWHERE	(~(phys_addr_t)0)
+</span></code></pre></div><p>つまり、<code>memblock.current_limit</code>は<code>0xffffffff</code>である。</p><h3 id=alloc_pte>alloc_pte</h3><p><code>arch/riscv/mm/init.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=n>phys_addr_t</span> <span class=n>__init</span> <span class=nf>alloc_pte</span><span class=p>(</span><span class=n>uintptr_t</span> <span class=n>va</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=cm>/*
+</span><span class=cm>	 * We only create PMD or PGD early mappings so we
+</span><span class=cm>	 * should never reach here with MMU disabled.
+</span><span class=cm>	 */</span>
+	<span class=n>BUG_ON</span><span class=p>(</span><span class=o>!</span><span class=n>mmu_enabled</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=n>memblock_phys_alloc</span><span class=p>(</span><span class=n>PAGE_SIZE</span><span class=p>,</span> <span class=n>PAGE_SIZE</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p><code>memblock_phys_alloc</code>は<code>memblock.memory.regions</code>より、<code>PAGE_SIZE</code>境界配置された、<code>PAGE_SIZE</code>分の領域を確保する。</p><p><code>include/linux/memblock.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kr>inline</span> <span class=n>phys_addr_t</span> <span class=nf>memblock_phys_alloc</span><span class=p>(</span><span class=n>phys_addr_t</span> <span class=n>size</span><span class=p>,</span>
+					      <span class=n>phys_addr_t</span> <span class=n>align</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>return</span> <span class=n>memblock_phys_alloc_range</span><span class=p>(</span><span class=n>size</span><span class=p>,</span> <span class=n>align</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span>
+					 <span class=n>MEMBLOCK_ALLOC_ACCESSIBLE</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p><code>start:0x00000000</code>、<code>end:MEMBLOCK_ALLOC_ACCESSIBLE(0x0)</code>、<code>size:PAGE_SIZE</code>、<code>align:PAGE_SIZE</code>を確保する。
+<code>end</code>が<code>MEMBLOCK_ALLOC_ACCESSIBLE</code>の場合は、<code>memblock_phys_alloc_range</code>では、<code>start</code>~<code>memblock.current_limit</code>の領域からメモリ領域を割り当てが制限される。</p><p><code>mm/memblock.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/**
+</span><span class=cm> * memblock_phys_alloc_range - allocate a memory block inside specified range
+</span><span class=cm> * @size: size of memory block to be allocated in bytes
+</span><span class=cm> * @align: alignment of the region and block&#39;s size
+</span><span class=cm> * @start: the lower bound of the memory region to allocate (physical address)
+</span><span class=cm> * @end: the upper bound of the memory region to allocate (physical address)
+</span><span class=cm> *
+</span><span class=cm> * Allocate @size bytes in the between @start and @end.
+</span><span class=cm> *
+</span><span class=cm> * Return: physical address of the allocated memory block on success,
+</span><span class=cm> * %0 on failure.
+</span><span class=cm> */</span>
+<span class=n>phys_addr_t</span> <span class=n>__init</span> <span class=nf>memblock_phys_alloc_range</span><span class=p>(</span><span class=n>phys_addr_t</span> <span class=n>size</span><span class=p>,</span>
+					     <span class=n>phys_addr_t</span> <span class=n>align</span><span class=p>,</span>
+					     <span class=n>phys_addr_t</span> <span class=n>start</span><span class=p>,</span>
+					     <span class=n>phys_addr_t</span> <span class=n>end</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>return</span> <span class=n>memblock_alloc_range_nid</span><span class=p>(</span><span class=n>size</span><span class=p>,</span> <span class=n>align</span><span class=p>,</span> <span class=n>start</span><span class=p>,</span> <span class=n>end</span><span class=p>,</span> <span class=n>NUMA_NO_NODE</span><span class=p>,</span>
+					<span class=nb>false</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p><code>mm/memblock.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/**
+</span><span class=cm> * memblock_alloc_range_nid - allocate boot memory block
+</span><span class=cm> * @size: size of memory block to be allocated in bytes
+</span><span class=cm> * @align: alignment of the region and block&#39;s size
+</span><span class=cm> * @start: the lower bound of the memory region to allocate (phys address)
+</span><span class=cm> * @end: the upper bound of the memory region to allocate (phys address)
+</span><span class=cm> * @nid: nid of the free area to find, %NUMA_NO_NODE for any node
+</span><span class=cm> * @exact_nid: control the allocation fall back to other nodes
+</span><span class=cm> *
+</span><span class=cm> * The allocation is performed from memory region limited by
+</span><span class=cm> * memblock.current_limit if @end == %MEMBLOCK_ALLOC_ACCESSIBLE.
+</span><span class=cm> *
+</span><span class=cm> * If the specified node can not hold the requested memory and @exact_nid
+</span><span class=cm> * is false, the allocation falls back to any node in the system.
+</span><span class=cm> *
+</span><span class=cm> * For systems with memory mirroring, the allocation is attempted first
+</span><span class=cm> * from the regions with mirroring enabled and then retried from any
+</span><span class=cm> * memory region.
+</span><span class=cm> *
+</span><span class=cm> * In addition, function sets the min_count to 0 using kmemleak_alloc_phys for
+</span><span class=cm> * allocated boot memory block, so that it is never reported as leaks.
+</span><span class=cm> *
+</span><span class=cm> * Return:
+</span><span class=cm> * Physical address of allocated memory block on success, %0 on failure.
+</span><span class=cm> */</span>
+<span class=n>phys_addr_t</span> <span class=n>__init</span> <span class=nf>memblock_alloc_range_nid</span><span class=p>(</span><span class=n>phys_addr_t</span> <span class=n>size</span><span class=p>,</span>
+					<span class=n>phys_addr_t</span> <span class=n>align</span><span class=p>,</span> <span class=n>phys_addr_t</span> <span class=n>start</span><span class=p>,</span>
+					<span class=n>phys_addr_t</span> <span class=n>end</span><span class=p>,</span> <span class=kt>int</span> <span class=n>nid</span><span class=p>,</span>
+					<span class=kt>bool</span> <span class=n>exact_nid</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>enum</span> <span class=n>memblock_flags</span> <span class=n>flags</span> <span class=o>=</span> <span class=n>choose_memblock_flags</span><span class=p>();</span>
+	<span class=n>phys_addr_t</span> <span class=n>found</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>WARN_ONCE</span><span class=p>(</span><span class=n>nid</span> <span class=o>==</span> <span class=n>MAX_NUMNODES</span><span class=p>,</span> <span class=s>&#34;Usage of MAX_NUMNODES is deprecated. Use NUMA_NO_NODE instead</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>))</span>
+		<span class=n>nid</span> <span class=o>=</span> <span class=n>NUMA_NO_NODE</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=o>!</span><span class=n>align</span><span class=p>)</span> <span class=p>{</span>
+		<span class=cm>/* Can&#39;t use WARNs this early in boot on powerpc */</span>
+		<span class=n>dump_stack</span><span class=p>();</span>
+		<span class=n>align</span> <span class=o>=</span> <span class=n>SMP_CACHE_BYTES</span><span class=p>;</span>
+	<span class=p>}</span>
+
+<span class=nl>again</span><span class=p>:</span>
+	<span class=n>found</span> <span class=o>=</span> <span class=n>memblock_find_in_range_node</span><span class=p>(</span><span class=n>size</span><span class=p>,</span> <span class=n>align</span><span class=p>,</span> <span class=n>start</span><span class=p>,</span> <span class=n>end</span><span class=p>,</span> <span class=n>nid</span><span class=p>,</span>
+					    <span class=n>flags</span><span class=p>);</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>found</span> <span class=o>&amp;&amp;</span> <span class=o>!</span><span class=n>memblock_reserve</span><span class=p>(</span><span class=n>found</span><span class=p>,</span> <span class=n>size</span><span class=p>))</span>
+		<span class=k>goto</span> <span class=n>done</span><span class=p>;</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>nid</span> <span class=o>!=</span> <span class=n>NUMA_NO_NODE</span> <span class=o>&amp;&amp;</span> <span class=o>!</span><span class=n>exact_nid</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>found</span> <span class=o>=</span> <span class=n>memblock_find_in_range_node</span><span class=p>(</span><span class=n>size</span><span class=p>,</span> <span class=n>align</span><span class=p>,</span> <span class=n>start</span><span class=p>,</span>
+						    <span class=n>end</span><span class=p>,</span> <span class=n>NUMA_NO_NODE</span><span class=p>,</span>
+						    <span class=n>flags</span><span class=p>);</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>found</span> <span class=o>&amp;&amp;</span> <span class=o>!</span><span class=n>memblock_reserve</span><span class=p>(</span><span class=n>found</span><span class=p>,</span> <span class=n>size</span><span class=p>))</span>
+			<span class=k>goto</span> <span class=n>done</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>flags</span> <span class=o>&amp;</span> <span class=n>MEMBLOCK_MIRROR</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>flags</span> <span class=o>&amp;=</span> <span class=o>~</span><span class=n>MEMBLOCK_MIRROR</span><span class=p>;</span>
+		<span class=n>pr_warn</span><span class=p>(</span><span class=s>&#34;Could not allocate %pap bytes of mirrored memory</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>,</span>
+			<span class=o>&amp;</span><span class=n>size</span><span class=p>);</span>
+		<span class=k>goto</span> <span class=n>again</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+
+<span class=nl>done</span><span class=p>:</span>
+	<span class=cm>/* Skip kmemleak for kasan_init() due to high volume. */</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>end</span> <span class=o>!=</span> <span class=n>MEMBLOCK_ALLOC_KASAN</span><span class=p>)</span>
+		<span class=cm>/*
+</span><span class=cm>		 * The min_count is set to 0 so that memblock allocated
+</span><span class=cm>		 * blocks are never reported as leaks. This is because many
+</span><span class=cm>		 * of these blocks are only referred via the physical
+</span><span class=cm>		 * address which is not looked up by kmemleak.
+</span><span class=cm>		 */</span>
+		<span class=n>kmemleak_alloc_phys</span><span class=p>(</span><span class=n>found</span><span class=p>,</span> <span class=n>size</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=mi>0</span><span class=p>);</span>
+
+	<span class=k>return</span> <span class=n>found</span><span class=p>;</span>
+<span class=p>}</span>
+<span class=p>...</span>
+<span class=cm>/**
+</span><span class=cm> * memblock_find_in_range_node - find free area in given range and node
+</span><span class=cm> * @size: size of free area to find
+</span><span class=cm> * @align: alignment of free area to find
+</span><span class=cm> * @start: start of candidate range
+</span><span class=cm> * @end: end of candidate range, can be %MEMBLOCK_ALLOC_ANYWHERE or
+</span><span class=cm> *       %MEMBLOCK_ALLOC_ACCESSIBLE
+</span><span class=cm> * @nid: nid of the free area to find, %NUMA_NO_NODE for any node
+</span><span class=cm> * @flags: pick from blocks based on memory attributes
+</span><span class=cm> *
+</span><span class=cm> * Find @size free area aligned to @align in the specified range and node.
+</span><span class=cm> *
+</span><span class=cm> * When allocation direction is bottom-up, the @start should be greater
+</span><span class=cm> * than the end of the kernel image. Otherwise, it will be trimmed. The
+</span><span class=cm> * reason is that we want the bottom-up allocation just near the kernel
+</span><span class=cm> * image so it is highly likely that the allocated memory and the kernel
+</span><span class=cm> * will reside in the same node.
+</span><span class=cm> *
+</span><span class=cm> * If bottom-up allocation failed, will try to allocate memory top-down.
+</span><span class=cm> *
+</span><span class=cm> * Return:
+</span><span class=cm> * Found address on success, 0 on failure.
+</span><span class=cm> */</span>
+<span class=k>static</span> <span class=n>phys_addr_t</span> <span class=n>__init_memblock</span> <span class=n>memblock_find_in_range_node</span><span class=p>(</span><span class=n>phys_addr_t</span> <span class=n>size</span><span class=p>,</span>
+					<span class=n>phys_addr_t</span> <span class=n>align</span><span class=p>,</span> <span class=n>phys_addr_t</span> <span class=n>start</span><span class=p>,</span>
+					<span class=n>phys_addr_t</span> <span class=n>end</span><span class=p>,</span> <span class=kt>int</span> <span class=n>nid</span><span class=p>,</span>
+					<span class=k>enum</span> <span class=n>memblock_flags</span> <span class=n>flags</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>phys_addr_t</span> <span class=n>kernel_end</span><span class=p>,</span> <span class=n>ret</span><span class=p>;</span>
+
+	<span class=cm>/* pump up @end */</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>end</span> <span class=o>==</span> <span class=n>MEMBLOCK_ALLOC_ACCESSIBLE</span> <span class=o>||</span>
+	    <span class=n>end</span> <span class=o>==</span> <span class=n>MEMBLOCK_ALLOC_KASAN</span><span class=p>)</span>
+		<span class=n>end</span> <span class=o>=</span> <span class=n>memblock</span><span class=p>.</span><span class=n>current_limit</span><span class=p>;</span>
+
+	<span class=cm>/* avoid allocating the first page */</span>
+	<span class=n>start</span> <span class=o>=</span> <span class=n>max_t</span><span class=p>(</span><span class=n>phys_addr_t</span><span class=p>,</span> <span class=n>start</span><span class=p>,</span> <span class=n>PAGE_SIZE</span><span class=p>);</span>
+	<span class=n>end</span> <span class=o>=</span> <span class=n>max</span><span class=p>(</span><span class=n>start</span><span class=p>,</span> <span class=n>end</span><span class=p>);</span>
+	<span class=n>kernel_end</span> <span class=o>=</span> <span class=n>__pa_symbol</span><span class=p>(</span><span class=n>_end</span><span class=p>);</span>
+
+	<span class=cm>/*
+</span><span class=cm>	 * try bottom-up allocation only when bottom-up mode
+</span><span class=cm>	 * is set and @end is above the kernel image.
+</span><span class=cm>	 */</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>memblock_bottom_up</span><span class=p>()</span> <span class=o>&amp;&amp;</span> <span class=n>end</span> <span class=o>&gt;</span> <span class=n>kernel_end</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>phys_addr_t</span> <span class=n>bottom_up_start</span><span class=p>;</span>
+
+		<span class=cm>/* make sure we will allocate above the kernel */</span>
+		<span class=n>bottom_up_start</span> <span class=o>=</span> <span class=n>max</span><span class=p>(</span><span class=n>start</span><span class=p>,</span> <span class=n>kernel_end</span><span class=p>);</span>
+
+		<span class=cm>/* ok, try bottom-up allocation first */</span>
+		<span class=n>ret</span> <span class=o>=</span> <span class=n>__memblock_find_range_bottom_up</span><span class=p>(</span><span class=n>bottom_up_start</span><span class=p>,</span> <span class=n>end</span><span class=p>,</span>
+						      <span class=n>size</span><span class=p>,</span> <span class=n>align</span><span class=p>,</span> <span class=n>nid</span><span class=p>,</span> <span class=n>flags</span><span class=p>);</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>ret</span><span class=p>)</span>
+			<span class=k>return</span> <span class=n>ret</span><span class=p>;</span>
+
+		<span class=cm>/*
+</span><span class=cm>		 * we always limit bottom-up allocation above the kernel,
+</span><span class=cm>		 * but top-down allocation doesn&#39;t have the limit, so
+</span><span class=cm>		 * retrying top-down allocation may succeed when bottom-up
+</span><span class=cm>		 * allocation failed.
+</span><span class=cm>		 *
+</span><span class=cm>		 * bottom-up allocation is expected to be fail very rarely,
+</span><span class=cm>		 * so we use WARN_ONCE() here to see the stack trace if
+</span><span class=cm>		 * fail happens.
+</span><span class=cm>		 */</span>
+		<span class=n>WARN_ONCE</span><span class=p>(</span><span class=n>IS_ENABLED</span><span class=p>(</span><span class=n>CONFIG_MEMORY_HOTREMOVE</span><span class=p>),</span>
+			  <span class=s>&#34;memblock: bottom-up allocation failed, memory hotremove may be affected</span><span class=se>\n</span><span class=s>&#34;</span><span class=p>);</span>
+	<span class=p>}</span>
+
+	<span class=k>return</span> <span class=n>__memblock_find_range_top_down</span><span class=p>(</span><span class=n>start</span><span class=p>,</span> <span class=n>end</span><span class=p>,</span> <span class=n>size</span><span class=p>,</span> <span class=n>align</span><span class=p>,</span> <span class=n>nid</span><span class=p>,</span>
+					      <span class=n>flags</span><span class=p>);</span>
+<span class=p>}</span>
+<span class=p>...</span>
+<span class=cm>/**
+</span><span class=cm> * __memblock_find_range_top_down - find free area utility, in top-down
+</span><span class=cm> * @start: start of candidate range
+</span><span class=cm> * @end: end of candidate range, can be %MEMBLOCK_ALLOC_ANYWHERE or
+</span><span class=cm> *       %MEMBLOCK_ALLOC_ACCESSIBLE
+</span><span class=cm> * @size: size of free area to find
+</span><span class=cm> * @align: alignment of free area to find
+</span><span class=cm> * @nid: nid of the free area to find, %NUMA_NO_NODE for any node
+</span><span class=cm> * @flags: pick from blocks based on memory attributes
+</span><span class=cm> *
+</span><span class=cm> * Utility called from memblock_find_in_range_node(), find free area top-down.
+</span><span class=cm> *
+</span><span class=cm> * Return:
+</span><span class=cm> * Found address on success, 0 on failure.
+</span><span class=cm> */</span>
+<span class=k>static</span> <span class=n>phys_addr_t</span> <span class=n>__init_memblock</span>
+<span class=n>__memblock_find_range_top_down</span><span class=p>(</span><span class=n>phys_addr_t</span> <span class=n>start</span><span class=p>,</span> <span class=n>phys_addr_t</span> <span class=n>end</span><span class=p>,</span>
+			       <span class=n>phys_addr_t</span> <span class=n>size</span><span class=p>,</span> <span class=n>phys_addr_t</span> <span class=n>align</span><span class=p>,</span> <span class=kt>int</span> <span class=n>nid</span><span class=p>,</span>
+			       <span class=k>enum</span> <span class=n>memblock_flags</span> <span class=n>flags</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>phys_addr_t</span> <span class=n>this_start</span><span class=p>,</span> <span class=n>this_end</span><span class=p>,</span> <span class=n>cand</span><span class=p>;</span>
+	<span class=n>u64</span> <span class=n>i</span><span class=p>;</span>
+
+	<span class=n>for_each_free_mem_range_reverse</span><span class=p>(</span><span class=n>i</span><span class=p>,</span> <span class=n>nid</span><span class=p>,</span> <span class=n>flags</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>this_start</span><span class=p>,</span> <span class=o>&amp;</span><span class=n>this_end</span><span class=p>,</span>
+					<span class=nb>NULL</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>this_start</span> <span class=o>=</span> <span class=n>clamp</span><span class=p>(</span><span class=n>this_start</span><span class=p>,</span> <span class=n>start</span><span class=p>,</span> <span class=n>end</span><span class=p>);</span>
+		<span class=n>this_end</span> <span class=o>=</span> <span class=n>clamp</span><span class=p>(</span><span class=n>this_end</span><span class=p>,</span> <span class=n>start</span><span class=p>,</span> <span class=n>end</span><span class=p>);</span>
+
+		<span class=k>if</span> <span class=p>(</span><span class=n>this_end</span> <span class=o>&lt;</span> <span class=n>size</span><span class=p>)</span>
+			<span class=k>continue</span><span class=p>;</span>
+
+		<span class=n>cand</span> <span class=o>=</span> <span class=n>round_down</span><span class=p>(</span><span class=n>this_end</span> <span class=o>-</span> <span class=n>size</span><span class=p>,</span> <span class=n>align</span><span class=p>);</span>
+		<span class=k>if</span> <span class=p>(</span><span class=n>cand</span> <span class=o>&gt;=</span> <span class=n>this_start</span><span class=p>)</span>
+			<span class=k>return</span> <span class=n>cand</span><span class=p>;</span>
+	<span class=p>}</span>
+
+	<span class=k>return</span> <span class=mi>0</span><span class=p>;</span>
+<span class=p>}</span>
+</code></pre></div><p>つまり、<code>alloc_pte</code>にて、<code>PAGE_SIZE</code>に境界配置された<code>PAGE_SIZE</code>サイズの領域を<code>memblock</code>より確保する。</p><h2 id=setup_vmの続き>setup_vmの続き</h2><h3 id=create_pgd_mapping>create_pgd_mapping</h3><p><code>arch/riscv/mm/init.c</code></p><pre><code>	if (pgd_val(pgdp[pgd_idx]) == 0) {
+		next_phys = alloc_pgd_next(va);
+		pgdp[pgd_idx] = pfn_pgd(PFN_DOWN(next_phys), PAGE_TABLE);
+		nextp = get_pgd_next_virt(next_phys);
+		memset(nextp, 0, PAGE_SIZE);
+...
+</code></pre><p><code>pfn_pgd</code>で、<code>next_phys</code>(PAGE_TABLE)に対する<code>PTE</code>を作り、<code>pgdp[pgd_idx]</code>に挿入する。
+<code>arch/riscv/mm/init.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#ifndef __PAGETABLE_PMD_FOLDED
+</span><span class=cp></span><span class=p>...</span>
+<span class=cp>#define pgd_next_t		pte_t
+</span><span class=cp>#define alloc_pgd_next(__va)	alloc_pte(__va)
+</span><span class=cp>#define get_pgd_next_virt(__pa)	get_pte_virt(__pa)
+</span><span class=cp>#define create_pgd_next_mapping(__nextp, __va, __pa, __sz, __prot)	\
+</span><span class=cp>	create_pte_mapping(__nextp, __va, __pa, __sz, __prot)
+</span><span class=cp>#define fixmap_pgd_next		fixmap_pte
+</span><span class=cp>#endif
+</span></code></pre></div><p><code>get_pgd_next_virt</code>は<code>get_pte_virt</code>である。</p><p><code>arch/riscv/mm/init.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=n>pte_t</span> <span class=o>*</span><span class=n>__init</span> <span class=nf>get_pte_virt</span><span class=p>(</span><span class=n>phys_addr_t</span> <span class=n>pa</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>mmu_enabled</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>clear_fixmap</span><span class=p>(</span><span class=n>FIX_PTE</span><span class=p>);</span>
+		<span class=k>return</span> <span class=p>(</span><span class=n>pte_t</span> <span class=o>*</span><span class=p>)</span><span class=n>set_fixmap_offset</span><span class=p>(</span><span class=n>FIX_PTE</span><span class=p>,</span> <span class=n>pa</span><span class=p>);</span>
+	<span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+		<span class=k>return</span> <span class=p>(</span><span class=n>pte_t</span> <span class=o>*</span><span class=p>)((</span><span class=n>uintptr_t</span><span class=p>)</span><span class=n>pa</span><span class=p>);</span>
+	<span class=p>}</span>
+<span class=p>}</span>
+</code></pre></div><h3 id=fixmap>fixmap</h3><p>fixmapはコンパイルタイムで確定する仮想アドレスである。
+それぞれのアドレスは1つのページフレームに対応する。
+カーネルはブート時にこれらをポインターとしてこの変わらないアドレスを使用する。
+fixmapの定義は<code>arch/riscv/include/asm/fixmap.h</code>に存在する。
+<code>arch/riscv/include/asm/fixmap.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/*
+</span><span class=cm> * Here we define all the compile-time &#39;special&#39; virtual addresses.
+</span><span class=cm> * The point is to have a constant address at compile time, but to
+</span><span class=cm> * set the physical address only in the boot process.
+</span><span class=cm> *
+</span><span class=cm> * These &#39;compile-time allocated&#39; memory buffers are page-sized. Use
+</span><span class=cm> * set_fixmap(idx,phys) to associate physical memory with fixmap indices.
+</span><span class=cm> */</span>
+<span class=k>enum</span> <span class=n>fixed_addresses</span> <span class=p>{</span>
+	<span class=n>FIX_HOLE</span><span class=p>,</span>
+<span class=cp>#define FIX_FDT_SIZE	SZ_1M
+</span><span class=cp></span>	<span class=n>FIX_FDT_END</span><span class=p>,</span>
+	<span class=n>FIX_FDT</span> <span class=o>=</span> <span class=n>FIX_FDT_END</span> <span class=o>+</span> <span class=n>FIX_FDT_SIZE</span> <span class=o>/</span> <span class=n>PAGE_SIZE</span> <span class=o>-</span> <span class=mi>1</span><span class=p>,</span>
+	<span class=n>FIX_PTE</span><span class=p>,</span>
+	<span class=n>FIX_PMD</span><span class=p>,</span>
+	<span class=n>FIX_TEXT_POKE1</span><span class=p>,</span>
+	<span class=n>FIX_TEXT_POKE0</span><span class=p>,</span>
+	<span class=n>FIX_EARLYCON_MEM_BASE</span><span class=p>,</span>
+	<span class=n>__end_of_fixed_addresses</span>
+<span class=p>};</span>
+</code></pre></div><p><code>arch/riscv/include/asm/pgtable.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#ifdef CONFIG_MMU
+</span><span class=cp></span>
+<span class=cp>#define VMALLOC_SIZE     (KERN_VIRT_SIZE &gt;&gt; 1)
+</span><span class=cp>#define VMALLOC_END      (PAGE_OFFSET - 1)
+</span><span class=cp>#define VMALLOC_START    (PAGE_OFFSET - VMALLOC_SIZE)
+</span><span class=cp></span>
+<span class=cp>#define BPF_JIT_REGION_SIZE	(SZ_128M)
+</span><span class=cp>#define BPF_JIT_REGION_START	(PAGE_OFFSET - BPF_JIT_REGION_SIZE)
+</span><span class=cp>#define BPF_JIT_REGION_END	(VMALLOC_END)
+</span><span class=cp></span>
+<span class=cm>/*
+</span><span class=cm> * Roughly size the vmemmap space to be large enough to fit enough
+</span><span class=cm> * struct pages to map half the virtual address space. Then
+</span><span class=cm> * position vmemmap directly below the VMALLOC region.
+</span><span class=cm> */</span>
+<span class=cp>#define VMEMMAP_SHIFT \
+</span><span class=cp>	(CONFIG_VA_BITS - PAGE_SHIFT - 1 + STRUCT_PAGE_MAX_SHIFT)
+</span><span class=cp>#define VMEMMAP_SIZE	BIT(VMEMMAP_SHIFT)
+</span><span class=cp>#define VMEMMAP_END	(VMALLOC_START - 1)
+</span><span class=cp>#define VMEMMAP_START	(VMALLOC_START - VMEMMAP_SIZE)
+</span><span class=cp></span>
+<span class=cm>/*
+</span><span class=cm> * Define vmemmap for pfn_to_page &amp; page_to_pfn calls. Needed if kernel
+</span><span class=cm> * is configured with CONFIG_SPARSEMEM_VMEMMAP enabled.
+</span><span class=cm> */</span>
+<span class=cp>#define vmemmap		((struct page *)VMEMMAP_START)
+</span><span class=cp></span>
+<span class=cp>#define PCI_IO_SIZE      SZ_16M
+</span><span class=cp>#define PCI_IO_END       VMEMMAP_START
+</span><span class=cp>#define PCI_IO_START     (PCI_IO_END - PCI_IO_SIZE)
+</span><span class=cp></span>
+<span class=cp>#define FIXADDR_TOP      PCI_IO_START
+</span><span class=cp>#ifdef CONFIG_64BIT
+</span><span class=cp>#define FIXADDR_SIZE     PMD_SIZE
+</span><span class=cp>#else
+</span><span class=cp>#define FIXADDR_SIZE     PGDIR_SIZE
+</span><span class=cp>#endif
+</span><span class=cp>#define FIXADDR_START    (FIXADDR_TOP - FIXADDR_SIZE)
+</span></code></pre></div><p>つまり、FIXMAP領域(<code>FIXADDR_TOP</code>)は<code>PCI_IO_START</code>(<code>0x9e000000</code>)より始まる。
+以下にメモリマップを示す。
+<span class=image-container><span class=link><a href=./image00.png target=_blank><img class=img src=./image00.png></a></span></span>
+fixmapはindexを用いて、indexに対応するfixmap内のページを割り当てる。
+次にindexから仮想アドレスへ割り当てる方法を見ていく。</p><h4 id=__set_fixmap>__set_fixmap</h4><p><code>__set_fixmap</code>では、<code>enum fixed_addresses</code>に対応するindexを物理アドレスへの変換をページテーブルに挿入する。
+<code>fixmap_pte</code>はfixmap用のページテーブルであり、fixmap領域4096KBをカバーする。
+<code>__fix_to_virt</code>にて、indexから仮想アドレスを計算する。
+次に、仮想アドレスと物理アドレスの変換するPTEを用意し、<code>fixmap_pte</code>テーブルを上書きする。</p><p><code>arch/riscv/mm/init.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=n>pgd_t</span> <span class=n>swapper_pg_dir</span><span class=p>[</span><span class=n>PTRS_PER_PGD</span><span class=p>]</span> <span class=n>__page_aligned_bss</span><span class=p>;</span>
+<span class=n>pgd_t</span> <span class=n>trampoline_pg_dir</span><span class=p>[</span><span class=n>PTRS_PER_PGD</span><span class=p>]</span> <span class=n>__page_aligned_bss</span><span class=p>;</span>
+<span class=n>pte_t</span> <span class=n>fixmap_pte</span><span class=p>[</span><span class=n>PTRS_PER_PTE</span><span class=p>]</span> <span class=n>__page_aligned_bss</span><span class=p>;</span>
+<span class=k>static</span> <span class=kt>bool</span> <span class=n>mmu_enabled</span><span class=p>;</span>
+
+<span class=cp>#define MAX_EARLY_MAPPING_SIZE	SZ_128M
+</span><span class=cp></span>
+<span class=n>pgd_t</span> <span class=n>early_pg_dir</span><span class=p>[</span><span class=n>PTRS_PER_PGD</span><span class=p>]</span> <span class=n>__initdata</span> <span class=n>__aligned</span><span class=p>(</span><span class=n>PAGE_SIZE</span><span class=p>);</span>
+
+<span class=kt>void</span> <span class=nf>__set_fixmap</span><span class=p>(</span><span class=k>enum</span> <span class=n>fixed_addresses</span> <span class=n>idx</span><span class=p>,</span> <span class=n>phys_addr_t</span> <span class=n>phys</span><span class=p>,</span> <span class=n>pgprot_t</span> <span class=n>prot</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=kt>unsigned</span> <span class=kt>long</span> <span class=n>addr</span> <span class=o>=</span> <span class=n>__fix_to_virt</span><span class=p>(</span><span class=n>idx</span><span class=p>);</span>
+	<span class=n>pte_t</span> <span class=o>*</span><span class=n>ptep</span><span class=p>;</span>
+
+	<span class=n>BUG_ON</span><span class=p>(</span><span class=n>idx</span> <span class=o>&lt;=</span> <span class=n>FIX_HOLE</span> <span class=o>||</span> <span class=n>idx</span> <span class=o>&gt;=</span> <span class=n>__end_of_fixed_addresses</span><span class=p>);</span>
+
+	<span class=n>ptep</span> <span class=o>=</span> <span class=o>&amp;</span><span class=n>fixmap_pte</span><span class=p>[</span><span class=n>pte_index</span><span class=p>(</span><span class=n>addr</span><span class=p>)];</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>pgprot_val</span><span class=p>(</span><span class=n>prot</span><span class=p>))</span>
+		<span class=n>set_pte</span><span class=p>(</span><span class=n>ptep</span><span class=p>,</span> <span class=n>pfn_pte</span><span class=p>(</span><span class=n>phys</span> <span class=o>&gt;&gt;</span> <span class=n>PAGE_SHIFT</span><span class=p>,</span> <span class=n>prot</span><span class=p>));</span>
+	<span class=k>else</span>
+		<span class=n>pte_clear</span><span class=p>(</span><span class=o>&amp;</span><span class=n>init_mm</span><span class=p>,</span> <span class=n>addr</span><span class=p>,</span> <span class=n>ptep</span><span class=p>);</span>
+	<span class=n>local_flush_tlb_page</span><span class=p>(</span><span class=n>addr</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><h4 id=__fix_to_virtおよび__virt_to_fix>__fix_to_virtおよび__virt_to_fix</h4><p>これらのマクロで、fixmapのindexから仮想アドレスへの相互変換を行う。
+<code>include/asm-generic/fixmap.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#define __fix_to_virt(x)	(FIXADDR_TOP - ((x) &lt;&lt; PAGE_SHIFT))
+</span><span class=cp>#define __virt_to_fix(x)	((FIXADDR_TOP - ((x)&amp;PAGE_MASK)) &gt;&gt; PAGE_SHIFT)
+</span><span class=cp></span>
+<span class=cp>#ifndef __ASSEMBLY__
+</span><span class=cp></span><span class=cm>/*
+</span><span class=cm> * &#39;index to address&#39; translation. If anyone tries to use the idx
+</span><span class=cm> * directly without translation, we catch the bug with a NULL-deference
+</span><span class=cm> * kernel oops. Illegal ranges of incoming indices are caught too.
+</span><span class=cm> */</span>
+<span class=k>static</span> <span class=n>__always_inline</span> <span class=kt>unsigned</span> <span class=kt>long</span> <span class=nf>fix_to_virt</span><span class=p>(</span><span class=k>const</span> <span class=kt>unsigned</span> <span class=kt>int</span> <span class=n>idx</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>BUILD_BUG_ON</span><span class=p>(</span><span class=n>idx</span> <span class=o>&gt;=</span> <span class=n>__end_of_fixed_addresses</span><span class=p>);</span>
+	<span class=k>return</span> <span class=n>__fix_to_virt</span><span class=p>(</span><span class=n>idx</span><span class=p>);</span>
+<span class=p>}</span>
+
+<span class=k>static</span> <span class=kr>inline</span> <span class=kt>unsigned</span> <span class=kt>long</span> <span class=nf>virt_to_fix</span><span class=p>(</span><span class=k>const</span> <span class=kt>unsigned</span> <span class=kt>long</span> <span class=n>vaddr</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>BUG_ON</span><span class=p>(</span><span class=n>vaddr</span> <span class=o>&gt;=</span> <span class=n>FIXADDR_TOP</span> <span class=o>||</span> <span class=n>vaddr</span> <span class=o>&lt;</span> <span class=n>FIXADDR_START</span><span class=p>);</span>
+	<span class=k>return</span> <span class=n>__virt_to_fix</span><span class=p>(</span><span class=n>vaddr</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p><code>__fix_to_virt</code>では、<code>FIXADDR_TOP</code>から<code>index&lt;&lt;PAGE_SHIFT</code>を引くことで求める。
+つまり、indexに対応する仮想アドレスのベースアドレスを返す。
+逆に、<code>__virt_to_fix</code>では、仮想アドレスより、対応するindexを求める。
+つまり、ページフレーム番号を求める。</p><h4 id=clear_fixmapとset_fixmap>clear_fixmapとset_fixmap</h4><p><code>include/asm-generic/fixmap.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/*
+</span><span class=cm> * Provide some reasonable defaults for page flags.
+</span><span class=cm> * Not all architectures use all of these different types and some
+</span><span class=cm> * architectures use different names.
+</span><span class=cm> */</span>
+<span class=cp>#ifndef FIXMAP_PAGE_NORMAL
+</span><span class=cp>#define FIXMAP_PAGE_NORMAL PAGE_KERNEL
+</span><span class=cp>#endif
+</span><span class=cp>#if !defined(FIXMAP_PAGE_RO) &amp;&amp; defined(PAGE_KERNEL_RO)
+</span><span class=cp>#define FIXMAP_PAGE_RO PAGE_KERNEL_RO
+</span><span class=cp>#endif
+</span><span class=cp>#ifndef FIXMAP_PAGE_NOCACHE
+</span><span class=cp>#define FIXMAP_PAGE_NOCACHE PAGE_KERNEL_NOCACHE
+</span><span class=cp>#endif
+</span><span class=cp>#ifndef FIXMAP_PAGE_IO
+</span><span class=cp>#define FIXMAP_PAGE_IO PAGE_KERNEL_IO
+</span><span class=cp>#endif
+</span><span class=cp>#ifndef FIXMAP_PAGE_CLEAR
+</span><span class=cp>#define FIXMAP_PAGE_CLEAR __pgprot(0)
+</span><span class=cp>#endif
+</span><span class=cp></span>
+<span class=cp>#ifndef set_fixmap
+</span><span class=cp>#define set_fixmap(idx, phys)				\
+</span><span class=cp>	__set_fixmap(idx, phys, FIXMAP_PAGE_NORMAL)
+</span><span class=cp>#endif
+</span><span class=cp></span>
+<span class=cp>#ifndef clear_fixmap
+</span><span class=cp>#define clear_fixmap(idx)			\
+</span><span class=cp>	__set_fixmap(idx, 0, FIXMAP_PAGE_CLEAR)
+</span><span class=cp>#endif
+</span><span class=cp></span>
+</code></pre></div><p><code>arch/riscv/include/asm/pgtable.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#define _PAGE_KERNEL		(_PAGE_READ \
+</span><span class=cp>				| _PAGE_WRITE \
+</span><span class=cp>				| _PAGE_PRESENT \
+</span><span class=cp>				| _PAGE_ACCESSED \
+</span><span class=cp>				| _PAGE_DIRTY)
+</span><span class=cp></span>
+<span class=cp>#define PAGE_KERNEL		__pgprot(_PAGE_KERNEL)
+</span><span class=cp>#define PAGE_KERNEL_EXEC	__pgprot(_PAGE_KERNEL | _PAGE_EXEC)
+</span><span class=cp></span>
+</code></pre></div><p><code>setup_fixmap</code>と<code>clear_fixmap</code>は<code>__set_fixmap</code>のラッパーである。
+PTEのprotを適切にセットする。</p><h4 id=set_fixmap_offset>set_fixmap_offset</h4><p><code>include/asm-generic/fixmap.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cm>/* Return a pointer with offset calculated */</span>
+<span class=cp>#define __set_fixmap_offset(idx, phys, flags)				\
+</span><span class=cp>({									\
+</span><span class=cp>	unsigned long ________addr;					\
+</span><span class=cp>	__set_fixmap(idx, phys, flags);					\
+</span><span class=cp>	________addr = fix_to_virt(idx) + ((phys) &amp; (PAGE_SIZE - 1));	\
+</span><span class=cp>	________addr;							\
+</span><span class=cp>})
+</span><span class=cp></span>
+<span class=cp>#define set_fixmap_offset(idx, phys) \
+</span><span class=cp>	__set_fixmap_offset(idx, phys, FIXMAP_PAGE_NORMAL)
+</span></code></pre></div><p><code>set_fixmap_offset</code>は<code>__set_fixmap</code>によりfixmapのセットを行い、
+<code>fix_to_virt</code>によりindexから対応する仮想アドレスのベースアドレスを求め、それにオフセット(物理アドレス)を足しそれを返す。</p><h3 id=get_pte_virt>get_pte_virt</h3><p><code>arch/riscv/mm/init.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=n>pte_t</span> <span class=o>*</span><span class=n>__init</span> <span class=nf>get_pte_virt</span><span class=p>(</span><span class=n>phys_addr_t</span> <span class=n>pa</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>if</span> <span class=p>(</span><span class=n>mmu_enabled</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>clear_fixmap</span><span class=p>(</span><span class=n>FIX_PTE</span><span class=p>);</span>
+		<span class=k>return</span> <span class=p>(</span><span class=n>pte_t</span> <span class=o>*</span><span class=p>)</span><span class=n>set_fixmap_offset</span><span class=p>(</span><span class=n>FIX_PTE</span><span class=p>,</span> <span class=n>pa</span><span class=p>);</span>
+	<span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+		<span class=k>return</span> <span class=p>(</span><span class=n>pte_t</span> <span class=o>*</span><span class=p>)((</span><span class=n>uintptr_t</span><span class=p>)</span><span class=n>pa</span><span class=p>);</span>
+	<span class=p>}</span>
+<span class=p>}</span>
+</code></pre></div><p><code>get_pte_virt</code>はfixmap領域の<code>FIX_PTE</code>を物理アドレス(<code>pa</code>)に割り当てる。</p><h2 id=setup_vm続き>setup_vm続き</h2><h3 id=create_pgd_mapping-1>create_pgd_mapping</h3><p><code>arch/riscv/mm/init.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c>	<span class=k>if</span> <span class=p>(</span><span class=n>pgd_val</span><span class=p>(</span><span class=n>pgdp</span><span class=p>[</span><span class=n>pgd_idx</span><span class=p>])</span> <span class=o>==</span> <span class=mi>0</span><span class=p>)</span> <span class=p>{</span>
+		<span class=n>next_phys</span> <span class=o>=</span> <span class=n>alloc_pgd_next</span><span class=p>(</span><span class=n>va</span><span class=p>);</span>
+		<span class=n>pgdp</span><span class=p>[</span><span class=n>pgd_idx</span><span class=p>]</span> <span class=o>=</span> <span class=n>pfn_pgd</span><span class=p>(</span><span class=n>PFN_DOWN</span><span class=p>(</span><span class=n>next_phys</span><span class=p>),</span> <span class=n>PAGE_TABLE</span><span class=p>);</span>
+		<span class=n>nextp</span> <span class=o>=</span> <span class=n>get_pgd_next_virt</span><span class=p>(</span><span class=n>next_phys</span><span class=p>);</span>
+		<span class=n>memset</span><span class=p>(</span><span class=n>nextp</span><span class=p>,</span> <span class=mi>0</span><span class=p>,</span> <span class=n>PAGE_SIZE</span><span class=p>);</span>
+	<span class=p>}</span> <span class=k>else</span> <span class=p>{</span>
+		<span class=n>next_phys</span> <span class=o>=</span> <span class=n>PFN_PHYS</span><span class=p>(</span><span class=n>_pgd_pfn</span><span class=p>(</span><span class=n>pgdp</span><span class=p>[</span><span class=n>pgd_idx</span><span class=p>]));</span>
+		<span class=n>nextp</span> <span class=o>=</span> <span class=n>get_pgd_next_virt</span><span class=p>(</span><span class=n>next_phys</span><span class=p>);</span>
+	<span class=p>}</span>
+
+	<span class=n>create_pgd_next_mapping</span><span class=p>(</span><span class=n>nextp</span><span class=p>,</span> <span class=n>va</span><span class=p>,</span> <span class=n>pa</span><span class=p>,</span> <span class=n>sz</span><span class=p>,</span> <span class=n>prot</span><span class=p>);</span>
+</code></pre></div><p><code>memset</code>にて、pteを0で初期化する。
+次に、<code>pgdp</code>にエントリーが存在しない場合を見ていく。
+<code>PFN_PHYS</code>はPFNから物理アドレスを計算する。
+<code>get_pgd_next_virt</code>にて、<code>FIX_PTE</code>を<code>next_phys</code>に変換するようにする。
+つまり、<code>create_pgd_mapping</code>はszが4MBページングの範囲ならPGDのエントリーを作成する。
+szが4KBの範囲ならPGDのエントリーをページテーブルを指すようにする。ページテーブルのエントリーが実際の変換を行うようにする(<code>create_pgd_next_mapping</code>)。</p><h3 id=create_pgd_next_mapping>create_pgd_next_mapping</h3><p><code>arch/riscv/mm/init.c</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=cp>#define create_pgd_next_mapping(__nextp, __va, __pa, __sz, __prot)	\
+</span><span class=cp>	create_pte_mapping(__nextp, __va, __pa, __sz, __prot)
+</span><span class=cp></span><span class=p>...</span>
+<span class=k>static</span> <span class=kt>void</span> <span class=n>__init</span> <span class=n>create_pte_mapping</span><span class=p>(</span><span class=n>pte_t</span> <span class=o>*</span><span class=n>ptep</span><span class=p>,</span>
+				      <span class=n>uintptr_t</span> <span class=n>va</span><span class=p>,</span> <span class=n>phys_addr_t</span> <span class=n>pa</span><span class=p>,</span>
+				      <span class=n>phys_addr_t</span> <span class=n>sz</span><span class=p>,</span> <span class=n>pgprot_t</span> <span class=n>prot</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=n>uintptr_t</span> <span class=n>pte_idx</span> <span class=o>=</span> <span class=n>pte_index</span><span class=p>(</span><span class=n>va</span><span class=p>);</span>
+
+	<span class=n>BUG_ON</span><span class=p>(</span><span class=n>sz</span> <span class=o>!=</span> <span class=n>PAGE_SIZE</span><span class=p>);</span>
+
+	<span class=k>if</span> <span class=p>(</span><span class=n>pte_none</span><span class=p>(</span><span class=n>ptep</span><span class=p>[</span><span class=n>pte_idx</span><span class=p>]))</span>
+		<span class=n>ptep</span><span class=p>[</span><span class=n>pte_idx</span><span class=p>]</span> <span class=o>=</span> <span class=n>pfn_pte</span><span class=p>(</span><span class=n>PFN_DOWN</span><span class=p>(</span><span class=n>pa</span><span class=p>),</span> <span class=n>prot</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p><code>include/linux/pgtable.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kr>inline</span> <span class=kt>unsigned</span> <span class=kt>long</span> <span class=nf>pte_index</span><span class=p>(</span><span class=kt>unsigned</span> <span class=kt>long</span> <span class=n>address</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>return</span> <span class=p>(</span><span class=n>address</span> <span class=o>&gt;&gt;</span> <span class=n>PAGE_SHIFT</span><span class=p>)</span> <span class=o>&amp;</span> <span class=p>(</span><span class=n>PTRS_PER_PTE</span> <span class=o>-</span> <span class=mi>1</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p><code>pte_index</code>はアドレスに対応するページテーブル配列のindexを求める。</p><p><code>arch/riscv/include/asm/pgtable.h</code></p><div class=highlight><pre class=chroma><code class=language-c data-lang=c><span class=k>static</span> <span class=kr>inline</span> <span class=kt>int</span> <span class=nf>pte_none</span><span class=p>(</span><span class=n>pte_t</span> <span class=n>pte</span><span class=p>)</span>
+<span class=p>{</span>
+	<span class=k>return</span> <span class=p>(</span><span class=n>pte_val</span><span class=p>(</span><span class=n>pte</span><span class=p>)</span> <span class=o>==</span> <span class=mi>0</span><span class=p>);</span>
+<span class=p>}</span>
+</code></pre></div><p><code>pte_none</code>はPTEがNULLであることを確かめる。
+次に、ページテーブルにエントリーを挿入する。</p><p>とりあえず、ここまで。</p></article><section class="article labels"><a class=category href=https://koyamanx.github.io/ck-dev/categories/linux/>Linux</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/linux/>Linux</a><a class=tag href=https://koyamanx.github.io/ck-dev/tags/risc-v/>RISC-V</a></section><div class="article share addthis_inline_share_toolbox"></div><script defer src="https://koyamanx.github.io/ck-dev/js/addthis_widget.min.99872df1091f055fca553e0b74b13c09bd383ef42b1c56a9edb651a91f122d56e7bc9a2fad73528246215b379b043226.js#pubid=x-1234567890" integrity=sha384-mYct8QkfBV/KVT4LdLE8Cb04PvQrHFap7bZRqR8SLVbnvJovrXNSgkYhWzebBDIm></script></div><div class="article bottom"><section class="article navigation"><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part4/><span class="iconfont icon-article"></span>Reading linux kernel part4</a></p><p><a class=link href=https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part2/><span class="iconfont icon-article"></span>Reading linux kernel part2</a></p></section><section class="article discussion"><div id=disqus_thread></div><script type=application/javascript>var disqus_config=function(){};(function(){if(["localhost","127.0.0.1"].indexOf(window.location.hostname)!=-1){document.getElementById('disqus_thread').innerHTML='Disqus comments not available by default when the website is previewed locally.';return}var b=document,a=b.createElement('script');a.async=!0,a.src='//https-koyamanx-github-io-ck-dev.disqus.com/embed.js',a.setAttribute('data-timestamp',+new Date),(b.head||b.body).appendChild(a)})()</script><noscript>Please enable JavaScript to view the <a href=https://disqus.com/?ref_noscript>comments powered by Disqus.</a></noscript><a href=https://disqus.com class=dsq-brlink>comments powered by <span class=logo-disqus>Disqus</span></a></section></div></section><section id=footer><div class=footer-wrap><p class=copyright>©2021 koyamanX</p><p class=powerby><span>Powered&nbsp;by&nbsp;</span><a href=https://gohugo.io target=_blank rel="noopener noreferrer">Hugo</a><span>&nbsp;&&nbsp;</span><a href=https://themes.gohugo.io/hugo-notepadium/ target=_blank rel="noopener noreferrer">Notepadium</a></p></div></section></body></html>
