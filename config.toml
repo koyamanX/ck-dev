@@ -4,7 +4,7 @@ title = "ck-dev"
 theme = "hugo-notepadium"
 copyright = "©2021 koyamanX"
 
-disqusShortname = "https-koyamanx-github-io-ck-dev"
+# disqusShortname = "https-koyamanx-github-io-ck-dev"
 
 publishDir = "docs"
 canonifyurls = true
