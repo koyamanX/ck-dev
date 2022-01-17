@@ -2,9 +2,9 @@
 title: "Booting linux kernel on my RISC-V part2"
 date: 2021-03-22T10:16:42+09:00
 author: "@koyamanX"
-categories: [""]
-tags: [""]
-draft: true
+categories: ["Linux"]
+tags: ["Linux", "RISC-V", "CPU"]
+draft: false
 ---
 [前回]({{<ref "/blog/booting_linux_kernel_on_my_riscv_part1/index.md" >}})で起きた、`riscv-int`の初期化中?のハングの原因を見ていく。
 <!--more-->
