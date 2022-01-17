@@ -1,0 +1,46 @@
+@startuml
+
+clock m_clock with period 1
+binary "p_reset" as p_reset
+
+binary "REQ_VALID" as req_valid
+binary "REQ_READY" as req_ready
+concise "REQ_ADDRESS" as req_address
+concise "REQ_DATA" as req_data
+concise "REQ_OP" as req_op
+binary "RSP_VALID" as rsp_valid
+binary "RSP_READY" as rsp_ready
+concise "RSP_DATA" as rsp_data
+concise "RSP_OP" as rsp_op
+
+@0
+p_reset is high
+req_valid is low
+req_ready is low
+req_address is "0x0"
+req_data is "0x0"
+req_op is "0x0"
+rsp_valid is low
+rsp_ready is low
+rsp_data is "0x0"
+rsp_op is "0x0"
+
+@1
+p_reset is low
+
+@5
+req_ready is high
+
+@5
+req_valid is high
+req_op is "READ"
+req_address is "address"
+rsp_ready is high
+
+@7
+rsp_valid is high
+rsp_op is ""
+rsp_data is "data read"
+
+
+@enduml
