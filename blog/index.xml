@@ -1,4 +1,50 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Blogs on ck-dev</title><link>https://koyamanx.github.io/ck-dev/blog/</link><description>Recent content in Blogs on ck-dev</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>©2021 koyamanX</copyright><lastBuildDate>Tue, 20 Jul 2021 22:28:05 +0900</lastBuildDate><atom:link href="https://koyamanx.github.io/ck-dev/blog/index.xml" rel="self" type="application/rss+xml"/><item><title>My RISC-V debug feature part8(implement suggested DMI signal interface)</title><link>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part8/</link><pubDate>Tue, 20 Jul 2021 22:28:05 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part8/</guid><description>&lt;p>独自のDMIインターフェースから推奨インターフェースに変更する。&lt;/p>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Blogs on ck-dev</title><link>https://koyamanx.github.io/ck-dev/blog/</link><description>Recent content in Blogs on ck-dev</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>©2021 koyamanX</copyright><lastBuildDate>Tue, 15 Feb 2022 00:41:52 +0900</lastBuildDate><atom:link href="https://koyamanx.github.io/ck-dev/blog/index.xml" rel="self" type="application/rss+xml"/><item><title>Design of branch instruction issue for RISC-V OoO</title><link>https://koyamanx.github.io/ck-dev/blog/design_riscv_ooo_branch/</link><pubDate>Tue, 15 Feb 2022 00:41:52 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/design_riscv_ooo_branch/</guid><description>&lt;p>趣味でRISC-Vのアウト・オブ・オーダープロセッサを実装している。
+Tomasulo algorithmに基づいている。
+今回は分岐命令の発行部分の検討をしていく。
+Commit: df27bdc1b9382573458b5bf571ca32a9fa93325c&lt;/p>
+&lt;h1 id="bru-pipe">BRU pipe&lt;/h1>
+&lt;p>今回の実装では分岐命令はBRU(BRanch Unit) pipeで実行する。2-wayのデコードのスーパスカラな実装で、現状はALUパイプは2つある。
+ここにBRUパイプとリザベーションステーションを追加する。&lt;/p>
+&lt;h1 id="branch命令の実行">Branch命令の実行&lt;/h1>
+&lt;p>今回はBranch命令を以下のように分類する。&lt;/p>
+&lt;ul>
+&lt;li>Branch(opcode == BRANCH)&lt;/li>
+&lt;li>Jump(opcode == JAL || opcode == JALR)&lt;/li>
+&lt;/ul>
+&lt;p>現状の実装では、Jump命令は分岐のコンディションを計算する必要ないため、ALUパイプへ発行している。分岐パイプが実装できたら、こちらへ発行するようにする。&lt;/p>
+&lt;h2 id="bru-rs">BRU RS&lt;/h2>
+&lt;p>分岐パイプ用のリザベーションステーションは１つとする。（エントリではない）
+フェッチパケット(命令フェッチの単位、今回は２命令同時フェッチ）内に分岐命令が２つある場合、デコードステージを２回行う。
+一回目では先行の命令のみを発行をする。次のサイクルでは次の命令を発行する。&lt;/p>
+&lt;p>issueステージでは、分岐命令が１つしか発行されないことを前提する。
+issueステージでは、BRU用のリザベーションステーションへ発行する。&lt;/p>
+&lt;p>オペランドが揃った時点で、BRUパイプへDispatchする。&lt;/p>
+&lt;p>実行ステージでは、分岐命令の成否とターゲットアドレスを計算する。
+つまり、必要なオペランドは以下のものとなる。&lt;/p>
+&lt;ul>
+&lt;li>PC&lt;/li>
+&lt;li>Imm&lt;/li>
+&lt;li>rs1&lt;/li>
+&lt;li>rs2&lt;/li>
+&lt;/ul>
+&lt;p>ターゲットアドレスはissueステージで計算可能なので、事前にissueステージでpc+immを計算し、ROB.Targetへ格納しておく。
+実行ステージではrs1 Branch Op rs2を計算し、write resultステージで、ROB.ValueへCDBを通してブロードキャストする
+Jump命令の場合は常に、1を格納する。&lt;/p>
+&lt;h2 id="bru-commit">BRU Commit&lt;/h2>
+&lt;p>コミット時には、以下の条件で分岐をする。&lt;/p>
+&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-c" data-lang="c">&lt;span class="k">if&lt;/span>&lt;span class="p">((&lt;/span>&lt;span class="n">opcode&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">JAL&lt;/span> &lt;span class="o">||&lt;/span> &lt;span class="n">opcode&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">JALR&lt;/span> &lt;span class="o">||&lt;/span> &lt;span class="n">opcode&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">BRANCH&lt;/span>&lt;span class="p">))&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="k">if&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">opcode&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">JAL&lt;/span> &lt;span class="o">||&lt;/span> &lt;span class="n">opcode&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">JALR&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">GPR&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="n">rd&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">PC4&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;span class="p">}&lt;/span>
+&lt;span class="k">if&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">ROB&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Value&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">])&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="n">Redirect&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">ROB&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">Target&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;span class="c1">// Feedback to Branch prediction unit if it presents
+&lt;/span>&lt;span class="c1">&lt;/span> &lt;span class="c1">// Also check prediction and actual result
+&lt;/span>&lt;span class="c1">&lt;/span> &lt;span class="p">}&lt;/span>
+&lt;span class="p">}&lt;/span> &lt;span class="k">else&lt;/span> &lt;span class="p">{&lt;/span>
+&lt;span class="c1">// Normal commit
+&lt;/span>&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div></description></item><item><title>My RISC-V debug feature part8(implement suggested DMI signal interface)</title><link>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part8/</link><pubDate>Tue, 20 Jul 2021 22:28:05 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/my_riscv_debug_feature_part8/</guid><description>&lt;p>独自のDMIインターフェースから推奨インターフェースに変更する。&lt;/p>
 &lt;p>riscv-debugによると、以下の信号がインターフェースとして推奨されているようである。&lt;/p>
 &lt;span class="image-container">&lt;span class="link" >&lt;a href="./suggested_DMI_interface_from_spec.png"
 target="_blank">&lt;img class="img" src="./suggested_DMI_interface_from_spec.png"/>&lt;/a>&lt;/span>
@@ -2262,224 +2308,4 @@ target="_blank">&lt;img class="img" src="./image00.png"/>&lt;/a>&lt;/span>
 &lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">(&lt;/span>&lt;span class="nf">_TIF_NOTIFY_RESUME&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_TIF_SIGPENDING&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">_TIF_NEED_RESCHED&lt;/span>&lt;span class="p">)&lt;/span>
 &lt;/code>&lt;/pre>&lt;/div>&lt;p>これで、おおよそトラップ時の動作を見た。
 トラップの処理自体を詳しく理解するには、&lt;code>excp_vect_table&lt;/code>、&lt;code>sys_call_table&lt;/code>、&lt;code>do_trap_unknown&lt;/code>、&lt;code>handle_arch_irq&lt;/code>を読む必要がある。
-また、&lt;code>work_pending&lt;/code>や&lt;code>ptrace&lt;/code>関連のパスは読んでいないが、後に必要になるかもしれない。&lt;/p></description></item><item><title>Reading linux kernel part5</title><link>https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part5/</link><pubDate>Thu, 01 Apr 2021 21:49:28 +0900</pubDate><guid>https://koyamanx.github.io/ck-dev/blog/reading_linux_kernel_part5/</guid><description>&lt;p>&lt;code>setup_vm&lt;/code>、&lt;code>relocate&lt;/code>を読み終えたので、次は&lt;code>start_kernel&lt;/code>実行までを読んでいく。&lt;/p>
-&lt;h2 id="setup_trap_vector">setup_trap_vector&lt;/h2>
-&lt;p>&lt;code>arch/riscv/kernel/head.S&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm"> &lt;span class="nf">call&lt;/span> &lt;span class="no">setup_vm&lt;/span>
-&lt;span class="c">#ifdef CONFIG_MMU
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="nf">la&lt;/span> &lt;span class="no">a0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">early_pg_dir&lt;/span>
-&lt;span class="nf">call&lt;/span> &lt;span class="no">relocate&lt;/span>
-&lt;span class="c">#endif /* CONFIG_MMU */
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="nf">call&lt;/span> &lt;span class="no">setup_trap_vector&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Restore&lt;/span> &lt;span class="no">C&lt;/span> &lt;span class="no">environment&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">la&lt;/span> &lt;span class="no">tp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">init_task&lt;/span>
-&lt;span class="nf">sw&lt;/span> &lt;span class="no">zero&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">TASK_TI_CPU&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">tp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">la&lt;/span> &lt;span class="no">sp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">init_thread_union&lt;/span> &lt;span class="err">+&lt;/span> &lt;span class="no">THREAD_SIZE&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;p>次に呼ばれる関数は&lt;code>setup_trap_vector&lt;/code>である。&lt;/p>
-&lt;p>&lt;code>arch/riscv/kernel/head.S&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="na">.align&lt;/span> &lt;span class="mi">2&lt;/span>
-&lt;span class="nl">setup_trap_vector:&lt;/span>
-&lt;span class="err">/*&lt;/span> &lt;span class="nf">Set&lt;/span> &lt;span class="no">trap&lt;/span> &lt;span class="no">vector&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">exception&lt;/span> &lt;span class="no">handler&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">la&lt;/span> &lt;span class="no">a0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">handle_exception&lt;/span>
-&lt;span class="nf">csrw&lt;/span> &lt;span class="no">CSR_TVEC&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">a0&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">Set&lt;/span> &lt;span class="no">sup0&lt;/span> &lt;span class="no">scratch&lt;/span> &lt;span class="no">register&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">indicating&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">exception&lt;/span> &lt;span class="no">vector&lt;/span> &lt;span class="no">that&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">we&lt;/span> &lt;span class="no">are&lt;/span> &lt;span class="no">presently&lt;/span> &lt;span class="no">executing&lt;/span> &lt;span class="no">in&lt;/span> &lt;span class="no">kernel.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">csrw&lt;/span> &lt;span class="no">CSR_SCRATCH&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">zero&lt;/span>
-&lt;span class="nf">ret&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;p>つまり、&lt;code>handle_exception&lt;/code>のアドレスを&lt;code>stvec&lt;/code>にダイレクトモードとしてセットする。
-&lt;code>csrw CSR_SCRATCH, zero&lt;/code>の&lt;code>SSCRATCH&lt;/code>の構造はよくわからないが、コメントによると&lt;code>sup0&lt;/code>が&lt;code>0&lt;/code>であると、カーネルモードとするらしい。
-&lt;code>handle_exception&lt;/code>はどうなっているか見てみる。
-かなり長い。
-&lt;code>arch/riscv/kernel/entry.S&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="nf">ENTRY&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">handle_exception&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">If&lt;/span> &lt;span class="no">coming&lt;/span> &lt;span class="no">from&lt;/span> &lt;span class="no">userspace&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">preserve&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">user&lt;/span> &lt;span class="no">thread&lt;/span> &lt;span class="no">pointer&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">load&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">the&lt;/span> &lt;span class="no">kernel&lt;/span> &lt;span class="no">thread&lt;/span> &lt;span class="no">pointer.&lt;/span> &lt;span class="no">If&lt;/span> &lt;span class="no">we&lt;/span> &lt;span class="no">came&lt;/span> &lt;span class="no">from&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">kernel&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">scratch&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">register&lt;/span> &lt;span class="no">will&lt;/span> &lt;span class="no">contain&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">we&lt;/span> &lt;span class="no">should&lt;/span> &lt;span class="no">continue&lt;/span> &lt;span class="no">on&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">current&lt;/span> &lt;span class="no">TP.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">csrrw&lt;/span> &lt;span class="no">tp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">CSR_SCRATCH&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">tp&lt;/span>
-&lt;span class="nf">bnez&lt;/span> &lt;span class="no">tp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">_save_context&lt;/span>
-&lt;span class="nl">_restore_kernel_tpsp:&lt;/span>
-&lt;span class="nf">csrr&lt;/span> &lt;span class="no">tp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">CSR_SCRATCH&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">sp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">TASK_TI_KERNEL_SP&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">tp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nl">_save_context:&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">sp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">TASK_TI_USER_SP&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">tp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_L&lt;/span> &lt;span class="no">sp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">TASK_TI_KERNEL_SP&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">tp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">addi&lt;/span> &lt;span class="no">sp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">sp&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="p">-(&lt;/span>&lt;span class="no">PT_SIZE_ON_STACK&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_RA&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_GP&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x5&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_T0&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x6&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_T1&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x7&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_T2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x8&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S0&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x9&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S1&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x10&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_A0&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x11&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_A1&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x12&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_A2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x13&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_A3&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x14&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_A4&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x15&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_A5&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x16&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_A6&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x17&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_A7&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x18&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S2&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x19&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S3&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x20&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S4&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x21&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S5&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x22&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S6&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x23&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S7&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x24&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S8&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x25&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S9&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x26&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S10&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x27&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_S11&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x28&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_T3&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x29&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_T4&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x30&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_T5&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">x31&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_T6&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">Disable&lt;/span> &lt;span class="no">user-mode&lt;/span> &lt;span class="no">memory&lt;/span> &lt;span class="no">access&lt;/span> &lt;span class="no">as&lt;/span> &lt;span class="no">it&lt;/span> &lt;span class="no">should&lt;/span> &lt;span class="no">only&lt;/span> &lt;span class="no">be&lt;/span> &lt;span class="no">set&lt;/span> &lt;span class="no">in&lt;/span> &lt;span class="no">the&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">actual&lt;/span> &lt;span class="no">user&lt;/span> &lt;span class="no">copy&lt;/span> &lt;span class="no">routines.&lt;/span>
-&lt;span class="err">*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">Disable&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">FPU&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">detect&lt;/span> &lt;span class="no">illegal&lt;/span> &lt;span class="no">usage&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">floating&lt;/span> &lt;span class="no">point&lt;/span> &lt;span class="no">in&lt;/span> &lt;span class="no">kernel&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">space.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">li&lt;/span> &lt;span class="no">t0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">SR_SUM&lt;/span> &lt;span class="err">|&lt;/span> &lt;span class="no">SR_FS&lt;/span>
-&lt;span class="nf">REG_L&lt;/span> &lt;span class="no">s0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">TASK_TI_USER_SP&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">tp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">csrrc&lt;/span> &lt;span class="no">s1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">CSR_STATUS&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">t0&lt;/span>
-&lt;span class="nf">csrr&lt;/span> &lt;span class="no">s2&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">CSR_EPC&lt;/span>
-&lt;span class="nf">csrr&lt;/span> &lt;span class="no">s3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">CSR_TVAL&lt;/span>
-&lt;span class="nf">csrr&lt;/span> &lt;span class="no">s4&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">CSR_CAUSE&lt;/span>
-&lt;span class="nf">csrr&lt;/span> &lt;span class="no">s5&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">CSR_SCRATCH&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">s0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_SP&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">s1&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_STATUS&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">s2&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_EPC&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">s3&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_BADADDR&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">s4&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_CAUSE&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="nf">REG_S&lt;/span> &lt;span class="no">s5&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">PT_TP&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="no">sp&lt;/span>&lt;span class="p">)&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">Set&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">scratch&lt;/span> &lt;span class="no">register&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">so&lt;/span> &lt;span class="no">that&lt;/span> &lt;span class="no">if&lt;/span> &lt;span class="no">a&lt;/span> &lt;span class="no">recursive&lt;/span> &lt;span class="no">exception&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">occurs&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">exception&lt;/span> &lt;span class="no">vector&lt;/span> &lt;span class="no">knows&lt;/span> &lt;span class="no">it&lt;/span> &lt;span class="no">came&lt;/span> &lt;span class="no">from&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">kernel&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">csrw&lt;/span> &lt;span class="no">CSR_SCRATCH&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">x0&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;p>カーネルモードからのトラップの場合は、&lt;code>SSCRATCH&lt;/code>は&lt;code>0&lt;/code>を示す。
-また、&lt;code>tp&lt;/code>はカーネルモードのThread pointerとなる。(&lt;code>_restore_kernel_tpsp&lt;/code>)
-一方、ユーザーモードからのトラップの場合は、&lt;code>SSCRATCH&lt;/code>はカーネルモードのThread Pointerを示す。
-また、&lt;code>tp&lt;/code>の値はユーザーモードが使用している。
-&lt;code>tp&lt;/code>にカーネルモードのThread Pointerをセットしたら、次にレジスタを保存する。
-まず、ユーザーモードの&lt;code>sp&lt;/code>を保存し、カーネルモードの&lt;code>sp&lt;/code>をロードする。
-次に、スタックを必要分確保し、汎用レジスタを保存する(&lt;code>sp&lt;/code>、&lt;code>tp&lt;/code>以外)。
-&lt;code>pt_regs&lt;/code>構造体として保存する。
-アセンブリ中ではオフセットは&lt;code>PT_&lt;/code>で表される。&lt;/p>
-&lt;p>&lt;code>arch/riscv/include/asm/ptrace.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="nf">struct&lt;/span> &lt;span class="no">pt_regs&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">epc&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">ra&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">sp&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">gp&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">tp&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">t0&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">t1&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">t2&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s0&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s1&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">a0&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">a1&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">a2&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">a3&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">a4&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">a5&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">a6&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">a7&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s2&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s3&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s4&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s5&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s6&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s7&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s8&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s9&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s10&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">s11&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">t3&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">t4&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">t5&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">t6&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/&lt;/span>&lt;span class="p">*&lt;/span> &lt;span class="no">Supervisor&lt;/span>&lt;span class="err">/&lt;/span>&lt;span class="no">Machine&lt;/span> &lt;span class="no">CSRs&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">status&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">badaddr&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">cause&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/&lt;/span>&lt;span class="p">*&lt;/span> &lt;span class="no">a0&lt;/span> &lt;span class="no">value&lt;/span> &lt;span class="no">before&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">syscall&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">orig_a0&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>また、&lt;code>TASK_TI&lt;/code>で表される構造体は(&lt;code>struct thread_info&lt;/code>)であり、&lt;code>task_struct&lt;/code>構造体に組み込まれている。&lt;/p>
-&lt;p>かなり長いので、最初の方だけ。
-ちなみに、Linuxのプロセスは&lt;code>task_struct&lt;/code>にて表現される。
-また、カーネルレベルのスレッドの実装にも使われる。&lt;/p>
-&lt;ul>
-&lt;li>&lt;a href="http://www.coins.tsukuba.ac.jp/~yas/coins/os2-2013/2013-12-26/"target="_blank" rel="noopener noreferrer">■Linux task構造体&lt;/a>
-&lt;/li>
-&lt;/ul>
-&lt;p>&lt;code>include/linux/sched.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="nf">struct&lt;/span> &lt;span class="no">task_struct&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="c">#ifdef CONFIG_THREAD_INFO_IN_TASK
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">For&lt;/span> &lt;span class="no">reasons&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">header&lt;/span> &lt;span class="no">soup&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">see&lt;/span> &lt;span class="no">current_thread_info&lt;/span>&lt;span class="p">()),&lt;/span> &lt;span class="no">this&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">must&lt;/span> &lt;span class="no">be&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">first&lt;/span> &lt;span class="no">element&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">task_struct.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">struct&lt;/span> &lt;span class="no">thread_info&lt;/span> &lt;span class="no">thread_info&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">#endif
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/&lt;/span>&lt;span class="p">*&lt;/span> &lt;span class="p">-&lt;/span>&lt;span class="mi">1&lt;/span> &lt;span class="no">unrunnable&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">0&lt;/span> &lt;span class="no">runnable&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="err">&amp;gt;&lt;/span>&lt;span class="mi">0&lt;/span> &lt;span class="no">stopped&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">volatile&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">state&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">This&lt;/span> &lt;span class="no">begins&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">randomizable&lt;/span> &lt;span class="no">portion&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">task_struct.&lt;/span> &lt;span class="no">Only&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">scheduling-critical&lt;/span> &lt;span class="no">items&lt;/span> &lt;span class="no">should&lt;/span> &lt;span class="no">be&lt;/span> &lt;span class="no">added&lt;/span> &lt;span class="no">above&lt;/span> &lt;span class="no">here.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">randomized_struct_fields_start&lt;/span>
-&lt;span class="nf">void&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="no">stack&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">refcount_t&lt;/span> &lt;span class="no">usage&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/&lt;/span>&lt;span class="p">*&lt;/span> &lt;span class="no">Per&lt;/span> &lt;span class="no">task&lt;/span> &lt;span class="no">flags&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="no">PF_&lt;/span>&lt;span class="p">*),&lt;/span> &lt;span class="no">defined&lt;/span> &lt;span class="no">further&lt;/span> &lt;span class="no">below&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="p">*&lt;/span>&lt;span class="err">/&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">flags&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">unsigned&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">ptrace&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>thread_info&lt;/code>構造体は&lt;code>arch/riscv/include/asm/thread_info.h&lt;/code>にある。
-&lt;code>arch/riscv/include/asm/thread_info.h&lt;/code>&lt;/p>
-&lt;div class="highlight">&lt;pre class="chroma">&lt;code class="language-asm" data-lang="asm">&lt;span class="err">/*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">low&lt;/span> &lt;span class="no">level&lt;/span> &lt;span class="no">task&lt;/span> &lt;span class="no">data&lt;/span> &lt;span class="no">that&lt;/span> &lt;span class="no">entry.S&lt;/span> &lt;span class="no">needs&lt;/span> &lt;span class="no">immediate&lt;/span> &lt;span class="no">access&lt;/span> &lt;span class="no">to&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="err">-&lt;/span> &lt;span class="nf">this&lt;/span> &lt;span class="no">struct&lt;/span> &lt;span class="no">should&lt;/span> &lt;span class="no">fit&lt;/span> &lt;span class="no">entirely&lt;/span> &lt;span class="no">inside&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">one&lt;/span> &lt;span class="no">cache&lt;/span> &lt;span class="no">line&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="err">-&lt;/span> &lt;span class="nf">if&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">members&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="no">this&lt;/span> &lt;span class="no">struct&lt;/span> &lt;span class="no">changes&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">assembly&lt;/span> &lt;span class="no">constants&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">in&lt;/span> &lt;span class="no">asm-offsets.c&lt;/span> &lt;span class="no">must&lt;/span> &lt;span class="no">be&lt;/span> &lt;span class="no">updated&lt;/span> &lt;span class="no">accordingly&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="err">-&lt;/span> &lt;span class="nf">thread_info&lt;/span> &lt;span class="no">is&lt;/span> &lt;span class="no">included&lt;/span> &lt;span class="no">in&lt;/span> &lt;span class="no">task_struct&lt;/span> &lt;span class="no">at&lt;/span> &lt;span class="no">an&lt;/span> &lt;span class="no">offset&lt;/span> &lt;span class="no">of&lt;/span> &lt;span class="mi">0&lt;/span>&lt;span class="p">.&lt;/span> &lt;span class="no">This&lt;/span> &lt;span class="no">means&lt;/span> &lt;span class="no">that&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">tp&lt;/span> &lt;span class="no">points&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">both&lt;/span> &lt;span class="no">thread_info&lt;/span> &lt;span class="no">and&lt;/span> &lt;span class="no">task_struct.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">struct&lt;/span> &lt;span class="no">thread_info&lt;/span> &lt;span class="err">{&lt;/span>
-&lt;span class="nf">unsigned&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">flags&lt;/span>&lt;span class="c">; /* low level flags */
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">preempt_count&lt;/span>&lt;span class="c">; /* 0=&amp;gt;preemptible, &amp;lt;0=&amp;gt;BUG */
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">mm_segment_t&lt;/span> &lt;span class="no">addr_limit&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="err">/&lt;/span>&lt;span class="p">*&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">These&lt;/span> &lt;span class="no">stack&lt;/span> &lt;span class="no">pointers&lt;/span> &lt;span class="no">are&lt;/span> &lt;span class="no">overwritten&lt;/span> &lt;span class="no">on&lt;/span> &lt;span class="no">every&lt;/span> &lt;span class="no">system&lt;/span> &lt;span class="no">call&lt;/span> &lt;span class="no">or&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">exception.&lt;/span> &lt;span class="no">SP&lt;/span> &lt;span class="no">is&lt;/span> &lt;span class="no">also&lt;/span> &lt;span class="no">saved&lt;/span> &lt;span class="no">to&lt;/span> &lt;span class="no">the&lt;/span> &lt;span class="no">stack&lt;/span> &lt;span class="no">it&lt;/span> &lt;span class="no">can&lt;/span> &lt;span class="no">be&lt;/span> &lt;span class="no">recovered&lt;/span> &lt;span class="no">when&lt;/span>
-&lt;span class="err">*&lt;/span> &lt;span class="nf">overwritten.&lt;/span>
-&lt;span class="err">*/&lt;/span>
-&lt;span class="nf">long&lt;/span> &lt;span class="no">kernel_sp&lt;/span>&lt;span class="c">; /* Kernel stack pointer */
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">long&lt;/span> &lt;span class="no">user_sp&lt;/span>&lt;span class="c">; /* User stack pointer */
-&lt;/span>&lt;span class="c">&lt;/span> &lt;span class="no">int&lt;/span> &lt;span class="no">cpu&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;span class="c">&lt;/span>&lt;span class="err">}&lt;/span>&lt;span class="c">;
-&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>メモリの構造を以下に示す。
-&lt;span class="image-container">&lt;span class="link" >&lt;a href="./image00.png"
-target="_blank">&lt;img class="img" src="./image00.png"/>&lt;/a>&lt;/span>
-&lt;/span>&lt;/p>
-&lt;p>まず、User modeの&lt;code>sp&lt;/code>を&lt;code>task_struct.thread_info.user_sp&lt;/code>に保存し、
-&lt;code>sp&lt;/code>に&lt;code>task_struct.thread_info.kernel_sp&lt;/code>を入れ、ユーザーモードのスタックからカーネルのスタックに切り替える。
-&lt;code>kernel_sp&lt;/code>は&lt;code>struct pt_regs&lt;/code>を保持するメモリ領域のポインタとなっている。
-&lt;code>pt_regs&lt;/code>へ&lt;code>sp&lt;/code>、&lt;code>tp&lt;/code>を覗いた汎用レジスタすべて保存する。&lt;/p>
-&lt;p>次に、&lt;code>t0&lt;/code>にsstatus.SUM、sstatus.FSビットを1にする。
-ユーザーモードのスタックポインタを&lt;code>s0&lt;/code>へ、
-&lt;code>s1&lt;/code>に&lt;code>sstatus&lt;/code>を読み出し、同時に&lt;code>t0&lt;/code>レジスタで&lt;code>sstatus&lt;/code>をクリアする。
-この段階で、Supervisor ModeでUビットのたった、ページにアクセスするとフォルトする。また、FPUは使用できない。
-&lt;code>s2&lt;/code>に&lt;code>sepc&lt;/code>、&lt;code>s3&lt;/code>に&lt;code>stval&lt;/code>、&lt;code>s4&lt;/code>に&lt;code>scause&lt;/code>、&lt;code>s5&lt;/code>に&lt;code>sscratch&lt;/code>を読み込み、次に、&lt;code>pt_regs&lt;/code>構造体の所定の位置に保存する。
-最後に、&lt;code>sscratch&lt;/code>に&lt;code>zero&lt;/code>をセットする。
-これにて、再帰的なカーネルモードののトラップに対応できる。&lt;/p>
-&lt;p>次は、グローバルポインタ(global pointer)のロードから読んでいく。&lt;/p></description></item></channel></rss>
+また、&lt;code>work_pending&lt;/code>や&lt;code>ptrace&lt;/code>関連のパスは読んでいないが、後に必要になるかもしれない。&lt;/p></description></item></channel></rss>
