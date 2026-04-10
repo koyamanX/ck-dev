@@ -1,4 +1,4 @@
-baseURL = "https://koyamanx.github.io/ck-dev"
+baseURL = "https://www.ck-dev.io/"
 languageCode = "en-us"
 title = "ck-dev"
 theme = "hugo-notepadium"
