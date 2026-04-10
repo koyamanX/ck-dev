@@ -1,4 +1,4 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>hugo on ck-dev</title><link>https://www.ck-dev.io/tags/hugo/</link><description>Recent content in hugo on ck-dev</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>©2021 koyamanX</copyright><lastBuildDate>Mon, 15 Mar 2021 06:40:17 +0900</lastBuildDate><atom:link href="https://www.ck-dev.io/tags/hugo/index.xml" rel="self" type="application/rss+xml"/><item><title>Design of branch instruction issue for RISC-V OoO</title><link>https://www.ck-dev.io/blog/design_riscv_ooo_branch/</link><pubDate>Tue, 15 Feb 2022 00:41:52 +0900</pubDate><guid>https://www.ck-dev.io/blog/design_riscv_ooo_branch/</guid><description>&lt;p>趣味でRISC-Vのアウト・オブ・オーダープロセッサを実装している。
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>hugo on ck-dev</title><link>https://www.ck-dev.io/ck-dev/tags/hugo/</link><description>Recent content in hugo on ck-dev</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>©2021 koyamanX</copyright><lastBuildDate>Mon, 15 Mar 2021 06:40:17 +0900</lastBuildDate><atom:link href="https://www.ck-dev.io/ck-dev/tags/hugo/index.xml" rel="self" type="application/rss+xml"/><item><title>Design of branch instruction issue for RISC-V OoO</title><link>https://www.ck-dev.io/ck-dev/blog/design_riscv_ooo_branch/</link><pubDate>Tue, 15 Feb 2022 00:41:52 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/design_riscv_ooo_branch/</guid><description>&lt;p>趣味でRISC-Vのアウト・オブ・オーダープロセッサを実装している。
 Tomasulo algorithmに基づいている。
 今回は分岐命令の発行部分の検討をしていく。
 Commit: df27bdc1b9382573458b5bf571ca32a9fa93325c&lt;/p>
@@ -44,12 +44,12 @@ Jump命令の場合は常に、1を格納する。&lt;/p>
 &lt;span class="p">}&lt;/span> &lt;span class="k">else&lt;/span> &lt;span class="p">{&lt;/span>
 &lt;span class="c1">// Normal commit
 &lt;/span>&lt;span class="c1">&lt;/span>&lt;span class="p">}&lt;/span>
-&lt;/code>&lt;/pre>&lt;/div></description></item><item><title>My RISC-V debug feature part8(implement suggested DMI signal interface)</title><link>https://www.ck-dev.io/blog/my_riscv_debug_feature_part8/</link><pubDate>Tue, 20 Jul 2021 22:28:05 +0900</pubDate><guid>https://www.ck-dev.io/blog/my_riscv_debug_feature_part8/</guid><description>&lt;p>独自のDMIインターフェースから推奨インターフェースに変更する。&lt;/p>
+&lt;/code>&lt;/pre>&lt;/div></description></item><item><title>My RISC-V debug feature part8(implement suggested DMI signal interface)</title><link>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part8/</link><pubDate>Tue, 20 Jul 2021 22:28:05 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part8/</guid><description>&lt;p>独自のDMIインターフェースから推奨インターフェースに変更する。&lt;/p>
 &lt;p>riscv-debugによると、以下の信号がインターフェースとして推奨されているようである。&lt;/p>
 &lt;span class="image-container">&lt;span class="link" >&lt;a href="./suggested_DMI_interface_from_spec.png"
 target="_blank">&lt;img class="img" src="./suggested_DMI_interface_from_spec.png"/>&lt;/a>&lt;/span>
 &lt;/span>
-&lt;p>ちなみに、今回の実装ではABITSは32 bitとしている。&lt;/p></description></item><item><title>My RISC-V debug feature part7 (examine関数(riscv013)の読解, DMの実装)</title><link>https://www.ck-dev.io/blog/my_riscv_debug_feature_part7/</link><pubDate>Sun, 16 May 2021 20:56:07 +0900</pubDate><guid>https://www.ck-dev.io/blog/my_riscv_debug_feature_part7/</guid><description>&lt;p>今回から、&lt;code>examine&lt;/code>関数を読み、初期化のフローを理解する。
+&lt;p>ちなみに、今回の実装ではABITSは32 bitとしている。&lt;/p></description></item><item><title>My RISC-V debug feature part7 (examine関数(riscv013)の読解, DMの実装)</title><link>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part7/</link><pubDate>Sun, 16 May 2021 20:56:07 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part7/</guid><description>&lt;p>今回から、&lt;code>examine&lt;/code>関数を読み、初期化のフローを理解する。
 DMを実装をして、&lt;code>examine&lt;/code>で初期化をできるようにしていく。&lt;/p>
 &lt;h2 id="examine関数">examine関数&lt;/h2>
 &lt;p>&lt;code>examine&lt;/code>関数はriscv013用のインターフェイスより呼び出される。&lt;/p>
@@ -220,7 +220,7 @@ target="_blank">&lt;img class="img" src="./image03.png"/>&lt;/a>&lt;/span>
 次回は、まだ実装していない&lt;code>hart&lt;/code>の選択方法から見ていく。
 なんか、投稿のフォーマットがぐちゃぐちゃで見づらい説はある。
 なんかいい方法ないかな。
-あと、表をいい感じに書きたい。&lt;/p></description></item><item><title>My RISC-V debug feature part6 (target examine, riscv examine)</title><link>https://www.ck-dev.io/blog/my_riscv_debug_feature_part6/</link><pubDate>Thu, 13 May 2021 23:02:58 +0900</pubDate><guid>https://www.ck-dev.io/blog/my_riscv_debug_feature_part6/</guid><description>&lt;p>今回も引き続き、OpenOCDのコードを読んでいく。
+あと、表をいい感じに書きたい。&lt;/p></description></item><item><title>My RISC-V debug feature part6 (target examine, riscv examine)</title><link>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part6/</link><pubDate>Thu, 13 May 2021 23:02:58 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part6/</guid><description>&lt;p>今回も引き続き、OpenOCDのコードを読んでいく。
 &lt;code>target_examine&lt;/code>と&lt;code>riscv_examine&lt;/code>を読む。&lt;/p>
 &lt;h2 id="target_examine">target_examine&lt;/h2>
 &lt;p>&lt;code>src/target/target.c&lt;/code>&lt;/p>
@@ -478,7 +478,7 @@ target="_blank">&lt;img class="img" src="./image00.png"/>&lt;/a>&lt;/span>
 &lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>init&lt;/code>では、&lt;code>riscv013&lt;/code>の処理用の関数を&lt;code>generic_info&lt;/code>構造体へセットしている。
 &lt;code>generic_info&lt;/code>のRISC-V Debug specのバージョン非依存なインターフェイスを提供する。&lt;/p>
 &lt;p>今日はここまで。
-次回は&lt;code>examine&lt;/code>を読んで、&lt;code>examine&lt;/code>の処理が通るようなDMを実装していく。&lt;/p></description></item><item><title>My RISC-V debug feature part5</title><link>https://www.ck-dev.io/blog/my_riscv_debug_feature_part5/</link><pubDate>Mon, 10 May 2021 22:21:40 +0900</pubDate><guid>https://www.ck-dev.io/blog/my_riscv_debug_feature_part5/</guid><description>&lt;p>仕様を読んでいるが、よくわからない。
+次回は&lt;code>examine&lt;/code>を読んで、&lt;code>examine&lt;/code>の処理が通るようなDMを実装していく。&lt;/p></description></item><item><title>My RISC-V debug feature part5</title><link>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part5/</link><pubDate>Mon, 10 May 2021 22:21:40 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part5/</guid><description>&lt;p>仕様を読んでいるが、よくわからない。
 hartselとかwindowみたいなのがあってよく分かりづらい。
 最小限の機能で、OpenOCDから制御できればいいので、
 OpenOCDの初期化フローを読んで、それに応答するようなDM(Debug Module)を作ってみる。&lt;/p>
@@ -931,7 +931,7 @@ target create &lt;span class="nv">$_TARGETNAME&lt;/span> riscv -endian &lt;span 
 &lt;code>adapter_init()&lt;/code>, &lt;code>transport init&lt;/code>, &lt;code>dap init&lt;/code>でJTAGの初期化をしている？
 &lt;code>target_examine&lt;/code>では、&lt;code>RISC-V Debug DM&lt;/code>が存在し、正しいステータスを返すかテストしているっぽい。
 次は、これらを詳しくみていく。
-なお、&lt;code>flash init&lt;/code>、&lt;code>nand init&lt;/code>、&lt;code>pld init&lt;/code>は見なくて良さそうなのでとりあえず放置する。&lt;/p></description></item><item><title>My RISC-V debug feature part4</title><link>https://www.ck-dev.io/blog/my_riscv_debug_feature_part4/</link><pubDate>Sun, 09 May 2021 23:05:20 +0900</pubDate><guid>https://www.ck-dev.io/blog/my_riscv_debug_feature_part4/</guid><description>&lt;p>これから、DM(Debug Module)の実装をおこない、VJTAGを通して、OpenOCDと情報をやりとりできるかを確認していく。
+なお、&lt;code>flash init&lt;/code>、&lt;code>nand init&lt;/code>、&lt;code>pld init&lt;/code>は見なくて良さそうなのでとりあえず放置する。&lt;/p></description></item><item><title>My RISC-V debug feature part4</title><link>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part4/</link><pubDate>Sun, 09 May 2021 23:05:20 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part4/</guid><description>&lt;p>これから、DM(Debug Module)の実装をおこない、VJTAGを通して、OpenOCDと情報をやりとりできるかを確認していく。
 まずは、かんたんな実装から始める。
 参照しているspecのバージョンは&lt;code>v0.13&lt;/code>である。&lt;/p>
 &lt;h2 id="機能">機能&lt;/h2>
@@ -1015,7 +1015,7 @@ make install
 &lt;/li>
 &lt;/ul>
 &lt;/li>
-&lt;/ul></description></item><item><title>My RISC-V debug feature part3</title><link>https://www.ck-dev.io/blog/my_riscv_debug_feature_part3/</link><pubDate>Tue, 20 Apr 2021 22:55:05 +0900</pubDate><guid>https://www.ck-dev.io/blog/my_riscv_debug_feature_part3/</guid><description>&lt;p>OpenOCD RISC-VにVJTAGのサポートを行う。
+&lt;/ul></description></item><item><title>My RISC-V debug feature part3</title><link>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part3/</link><pubDate>Tue, 20 Apr 2021 22:55:05 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part3/</guid><description>&lt;p>OpenOCD RISC-VにVJTAGのサポートを行う。
 OpenOCDにて、VJTAG on DE10-Liteにアクセスしてみる。&lt;/p>
 &lt;h3 id="openocdのvjtagサポート状況">OpenOCDのVJTAGサポート状況&lt;/h3>
 &lt;p>or1kはVJTAGに対応している。
@@ -1585,7 +1585,7 @@ dmstatusのリードに失敗しているが、実装していないので期待
 &lt;span class="image-container">&lt;span class="link" >&lt;a href="./image04.png"
 target="_blank">&lt;img class="img" src="./image04.png"/>&lt;/a>&lt;/span>
 &lt;/span>&lt;/p>
-&lt;p>次からは、DMの仕様読みと実装を行う。&lt;/p></description></item><item><title>My RISC-V debug feature part2</title><link>https://www.ck-dev.io/blog/my_riscv_debug_feature_part2/</link><pubDate>Sat, 17 Apr 2021 11:21:32 +0900</pubDate><guid>https://www.ck-dev.io/blog/my_riscv_debug_feature_part2/</guid><description>&lt;p>今回はIntel FPGAのVJTAGのIPを試してみる。
+&lt;p>次からは、DMの仕様読みと実装を行う。&lt;/p></description></item><item><title>My RISC-V debug feature part2</title><link>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part2/</link><pubDate>Sat, 17 Apr 2021 11:21:32 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part2/</guid><description>&lt;p>今回はIntel FPGAのVJTAGのIPを試してみる。
 FPGAボードはDE10 Liteを使用する。&lt;/p>
 &lt;h3 id="jtagjoint-test-action-group">JTAG(Joint Test Action Group)&lt;/h3>
 &lt;p>JTAGについては以下のサイトがわかりやすい。&lt;/p>
@@ -1866,7 +1866,7 @@ VIRのパスを選択する。&lt;/li>
 &lt;/ul>
 &lt;p>OpenOCDでは、or1kのみVJTAGに対応している。
 次からは、OpenOCDのRISC-VターゲットにVJTAGサポートを行う。
-その後、実際にOpenOCDからVJTAG on DE10-Liteに通信ができるかテストをする。&lt;/p></description></item><item><title>My RISC-V debug feature part1</title><link>https://www.ck-dev.io/blog/my_riscv_debug_feature_part1/</link><pubDate>Tue, 06 Apr 2021 10:39:30 +0900</pubDate><guid>https://www.ck-dev.io/blog/my_riscv_debug_feature_part1/</guid><description>&lt;p>RISC-VプロセッサのシミュレータはVerilog HDLからVerilatorにてC++へ変換して、ソフトウエアとして構築している。
+その後、実際にOpenOCDからVJTAG on DE10-Liteに通信ができるかテストをする。&lt;/p></description></item><item><title>My RISC-V debug feature part1</title><link>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part1/</link><pubDate>Tue, 06 Apr 2021 10:39:30 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/my_riscv_debug_feature_part1/</guid><description>&lt;p>RISC-VプロセッサのシミュレータはVerilog HDLからVerilatorにてC++へ変換して、ソフトウエアとして構築している。
 そろそろまともな実機テスト環境を整えたくなってきたので、FPGA上で検証できるシステムを構築する。&lt;/p>
 &lt;h2 id="デバック環境の検討">デバック環境の検討&lt;/h2>
 &lt;p>RISC-Vでは、RISC-V Debug Mode&lt;a href="https://github.com/riscv/riscv-debug-spec"target="_blank" rel="noopener noreferrer">RISC-V debug spec&lt;/a>
@@ -1902,7 +1902,7 @@ target="_blank">&lt;img class="img" src="./image00.png"/>&lt;/a>&lt;/span>
 &lt;li>gdbによる実機テスト&lt;/li>
 &lt;/ul>
 &lt;p>こんな感じで進めていく。
-まずは、Debug specをしっかり読んでいく。前に読んだときはさっぱりで諦めた(小声)&lt;/p></description></item><item><title>Reading linux kernel part6</title><link>https://www.ck-dev.io/blog/reading_linux_kernel_part6/</link><pubDate>Fri, 02 Apr 2021 13:59:10 +0900</pubDate><guid>https://www.ck-dev.io/blog/reading_linux_kernel_part6/</guid><description>&lt;p>&lt;code>handle_exception&lt;/code>の続きを読んでいく。&lt;/p>
+まずは、Debug specをしっかり読んでいく。前に読んだときはさっぱりで諦めた(小声)&lt;/p></description></item><item><title>Reading linux kernel part6</title><link>https://www.ck-dev.io/ck-dev/blog/reading_linux_kernel_part6/</link><pubDate>Fri, 02 Apr 2021 13:59:10 +0900</pubDate><guid>https://www.ck-dev.io/ck-dev/blog/reading_linux_kernel_part6/</guid><description>&lt;p>&lt;code>handle_exception&lt;/code>の続きを読んでいく。&lt;/p>
 &lt;h2 id="handle_exception">handle_exception&lt;/h2>
 &lt;p>global pointerのロードから。&lt;/p>
 &lt;p>&lt;code>arch/riscv/kernel/entry.S&lt;/code>&lt;/p>
